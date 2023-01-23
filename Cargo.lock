@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "Zip"
+name = "zipper"
 version = "0.1.0"

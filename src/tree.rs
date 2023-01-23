@@ -1,5 +1,10 @@
 use std::cmp::Ordering;
 
+pub struct Tree {
+    pub root: Box<Node>,
+    pub symbol_count: u32
+}
+
 pub struct Node {
     pub left: Option<Box<Node>>,
     pub right: Option<Box<Node>>,
@@ -26,7 +31,7 @@ impl Node {
         }
     }
 
-    pub fn is_root(&self) -> bool {
+    pub fn is_leaf(&self) -> bool {
         self.left == None && self.right == None
     }
 }

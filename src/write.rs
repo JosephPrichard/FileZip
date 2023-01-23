@@ -1,8 +1,10 @@
 use std::error::Error;
 use std::fs::{File, OpenOptions};
-use std::io::Write;
+use std::io::{Seek, SeekFrom, Write};
+use std::mem;
 use crate::bitwise;
 use crate::bitwise::{get_bit, SymbolCode};
+use crate::block::{FileBlock, BLOCK_SIZE};
 
 const BUFFER_LEN: usize = 512;
 const BUFFER_BIT_LEN: u32 = (BUFFER_LEN * 8) as u32;
@@ -29,6 +31,24 @@ impl FileWriter {
         })
     }
 
+    pub fn seek(&mut self, seek_pos: u64) -> Result<&mut FileWriter, Box<dyn Error>> {
+        self.file.seek(SeekFrom::Start(seek_pos))?;
+        Ok(self)
+    }
+
+    pub fn byte_len(&mut self) -> u32 {
+        self.bit_position / 8
+    }
+
+    pub fn align_to_byte(&mut self) {
+        self.bit_position = ((self.bit_position + 7) / 8) * 8;
+    }
+
+    fn persist_buffer(&mut self) -> Result<(), Box<dyn Error>> {
+        self.file.write(&self.buffer[0..((self.bit_position / 8) as usize)])?;
+        Ok(())
+    }
+
     fn update_buffer(&mut self) -> Result<(), Box<dyn Error>> {
         // check if at end of buffer: persist current buffer and start writing on a new one
         if self.bit_position > BUFFER_BIT_LEN {
@@ -42,10 +62,18 @@ impl FileWriter {
     pub fn write_byte(&mut self, byte: u8) -> Result<(), Box<dyn Error>> {
         self.update_buffer()?;
 
-        // write the byte into the buffer
+        // write the byte directly into the buffer
         self.buffer[(self.bit_position / 8) as usize] = byte;
         self.bit_position += 8;
 
+        Ok(())
+    }
+
+    pub fn write_bits(&mut self, byte: u8, count: u8) -> Result<(), Box<dyn Error>> {
+        // write each bit individually as they might end up in different bytes in the buffer
+        for i in 0..count {
+            self.write_bit(get_bit(byte as u32, i as u32))?;
+        }
         Ok(())
     }
 
@@ -63,11 +91,6 @@ impl FileWriter {
         Ok(())
     }
 
-    pub fn persist_buffer(&mut self) -> Result<(), Box<dyn Error>> {
-        self.file.write(&self.buffer[0..((self.bit_position / 8) as usize)])?;
-        Ok(())
-    }
-
     pub fn write_symbol(&mut self, symbol: &SymbolCode) -> Result<(), Box<dyn Error>> {
         for i in 0..symbol.bit_len {
             self.write_bit(get_bit(symbol.encoded_symbol, i as u32))?;
@@ -75,7 +98,26 @@ impl FileWriter {
         Ok(())
     }
 
-    pub fn write_number(&mut self, num: u32) {
+    pub fn write_block(&mut self, block: &FileBlock) -> Result<(), Box<dyn Error>> {
+        // write string to buffer
+        for c in block.filename.chars() {
+            self.write_byte(c as u8)?;
+        }
+        // write integers to buffer
+        let size_buffer: [u8; 4] = unsafe { mem::transmute(block.file_bit_size) };
+        let offset_buffer: [u8; 4] = unsafe { mem::transmute(block.file_offset) };
+        for i in 0..4 {
+            self.write_byte(size_buffer[i])?;
+        }
+        for i in 0..4 {
+            self.write_byte(offset_buffer[i])?;
+        }
+        Ok(())
+    }
+}
 
+impl Drop for FileWriter {
+    fn drop(&mut self) {
+        self.persist_buffer().expect("Failed to persist buffer when cleaning up writer");
     }
 }

@@ -10,6 +10,10 @@ pub struct SymbolCode {
 }
 
 impl SymbolCode {
+    pub fn new() -> SymbolCode {
+        SymbolCode { plain_symbol: 0, encoded_symbol: 0, bit_len: 0 }
+    }
+
     pub fn append_bit(&self, bit: u32) -> SymbolCode {
         SymbolCode {
             plain_symbol: self.plain_symbol,
@@ -25,12 +29,4 @@ pub fn get_bit(num: u32, n: u32) -> u8 {
 
 pub fn set_bit(num: u32, n: u32) -> u8 {
     ((1 << n) | num) as u8
-}
-
-pub fn get_byte(num: u32, n: u32) -> u8 {
-    ((num >> n) & 0xff) as u8
-}
-
-pub fn set_byte(num: u32, n: u32) -> u8 {
-    (((0xff as u32) << n) | num) as u8
 }
