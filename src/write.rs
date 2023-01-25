@@ -83,13 +83,16 @@ impl FileWriter {
     }
 
     pub fn write_block(&mut self, block: &FileBlock) {
+        // write string with a null terminator at the end
         for c in block.filename_rel.chars() {
             self.write_byte(c as u8);
         }
         self.write_byte(0);
+        // write each u64 field into the file
         self.write_u64(block.tree_bit_size);
         self.write_u64(block.data_bit_size);
         self.write_u64(block.file_byte_offset);
+        self.write_u64(block.original_byte_size);
     }
 
     pub fn write_u64(&mut self, num: u64) {

@@ -12,14 +12,26 @@ mod charset;
 mod utils;
 
 fn main() {
-    let a = "C:\\Users\\Joseph\\OneDrive\\Documents\\Programs\\Rust\\Zipper\\input";
-    let b = "C:\\Users\\Joseph\\OneDrive\\Documents\\Programs\\Rust\\Zipper\\output\\input.zipr";
-    let c = "C:\\Users\\Joseph\\OneDrive\\Documents\\Programs\\Rust\\Zipper\\output";
-
     let args: Vec<String> = env::args().collect();
 
-    compress::archive_dir(a, c);
-    decompress::unarchive_zip(b, c);
+    let mut target: String = String::from("");
+    let mut flag: String = String::from("");
 
+    for arg in args {
+        if arg.chars().nth(0).unwrap() == '-' {
+            flag = String::from(arg);
+        } else {
+            target = String::from(arg);
+        }
+    }
 
+    match flag.as_str() {
+        "-l" => {
+            let blocks = &decompress::get_file_blocks(&target);
+            block::list_file_blocks(blocks);
+        },
+        "-d" => decompress::unarchive_zip(&target),
+        "-c" => compress::archive_dir(&target),
+        _ => compress::archive_dir(&target)
+    }
 }

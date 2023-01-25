@@ -12,59 +12,27 @@ use crate::block::{CodeBook, FileBlock};
 use crate::charset::{GRP_SEP, REC_SEP, SIG};
 use crate::tree::{Node, Tree};
 use crate::read::FileReader;
+use crate::{block, utils};
 use crate::write::FileWriter;
 
 const TABLE_SIZE: usize = 256;
 
-pub fn archive_dir(input_dir: &str, output_dir: &str) {
-    println!("Begin archival of directory");
+pub fn archive_dir(input_dir: &str) {
     let now = Instant::now();
-    let input_size = dir_size(Path::new(input_dir));
 
-    println!("Fetching file blocks from entries");
     let mut blocks = get_file_blocks(input_dir);
-
-    println!("Generating code books for compression");
     create_code_books(&mut blocks);
 
-    let dir_name = get_dir_name(input_dir);
-    let archive_filename = &format!("{}{}{}{}", output_dir, path::MAIN_SEPARATOR, dir_name, ".zipr");
+    let archive_filename = &format!("{}{}", input_dir, ".zipr");
     let writer = &mut FileWriter::new(archive_filename);
     writer.write_u64(SIG);
 
-    println!("Writing block headers to archive");
     write_block_headers(writer, &mut blocks);
-
-    println!("Compressing file blocks to archive");
     compress_files(writer, &blocks);
 
-    let output_size = dir_size(Path::new(archive_filename));
     let elapsed = now.elapsed();
-    println!("Finished archival in {:.2?}", elapsed);
-    let ratio = (output_size as f64 / input_size as f64) * 100.0;
-    println!("Input size: {} bytes\nOutput size: {} bytes\nCompression Ratio: {}%\n", input_size, output_size, ratio);
-}
-
-fn dir_size(path: &Path) -> u64 {
-    let mut size = 0;
-    if path.is_dir() {
-        for entry in fs::read_dir(path).expect("Can't read directory") {
-            let entry = entry.expect("Entry is invalid");
-            let path = entry.path();
-            size += dir_size(&path);
-        }
-    } else {
-        size += path.metadata().expect("Can't get metadata").len();
-    }
-    size
-}
-
-pub fn get_dir_name(dir: &str) -> &str {
-    Path::new(dir)
-        .file_name()
-        .expect("Couldn't get directory name")
-        .to_str()
-        .expect("Couldn't convert to string")
+    println!("Finished zipping in {:.2?}", elapsed);
+    block::list_file_blocks(&blocks);
 }
 
 fn get_file_blocks(dir: &str) -> Vec<FileBlock> {
@@ -88,7 +56,9 @@ fn walk_path(base_path: &Path, path: &Path, blocks: &mut Vec<FileBlock>) {
                     .expect("Couldn't strip prefix from path")
                     .to_str()
                     .unwrap());
-                blocks.push(FileBlock::new(filename_rel, filename_abs));
+                let mut block = FileBlock::new(filename_rel, filename_abs);
+                block.original_byte_size = utils::dir_entry_size(&path);
+                blocks.push(block);
             }
         }
     }
@@ -96,9 +66,7 @@ fn walk_path(base_path: &Path, path: &Path, blocks: &mut Vec<FileBlock>) {
 
 fn create_code_books(blocks: &mut Vec<FileBlock>) {
     for block in blocks {
-        println!("Generating code book for file block {}", block.filename_rel);
         create_code_book(block);
-        println!("Finished code book generation for file block {}", block.filename_rel);
     }
 }
 
@@ -144,12 +112,10 @@ fn write_block_headers(writer: &mut FileWriter, blocks: &mut Vec<FileBlock>) {
 
 fn compress_files(writer: &mut FileWriter, blocks: &Vec<FileBlock>) {
     for block in blocks {
-        println!("Writing data segment {} into archive", block.filename_rel);
         let code_book = block.code_book.as_ref().unwrap();
         write_node(writer, &code_book.tree.root);
         compress_file(&block.filename_abs, writer, &code_book.symbol_table);
         writer.align_to_byte();
-        println!("Finished writing data segment {} into archive", block.filename_rel);
     }
 }
 

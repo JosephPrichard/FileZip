@@ -102,16 +102,19 @@ impl FileReader {
     }
 
     pub fn read_block(&mut self) -> FileBlock {
+        // reads string as bytes from file
         let mut filename_rel = String::new();
         let mut byte = self.read_byte();
         while byte != 0 {
             filename_rel.push(byte as char);
             byte = self.read_byte();
         }
+        // create block and read u64 values from file into fields
         let mut block = FileBlock::new(&filename_rel, "");
         block.tree_bit_size = self.read_u64();
         block.data_bit_size = self.read_u64();
         block.file_byte_offset = self.read_u64();
+        block.original_byte_size = self.read_u64();
         block
     }
 

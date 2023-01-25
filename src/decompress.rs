@@ -7,53 +7,58 @@ use std::path;
 use std::path::{Path};
 use std::time::Instant;
 use crate::bitwise::SymbolCode;
-use crate::block::FileBlock;
+use crate::block::{FileBlock, list_file_blocks};
 use crate::charset::{GRP_SEP, SIG};
 use crate::debug::debug_tree;
 use crate::read::FileReader;
 use crate::tree::Node;
-use crate::utils::get_size_of;
+use crate::utils::{get_parent_name, get_size_of};
 use crate::write::FileWriter;
 
-pub fn unarchive_zip(input_filepath: &str, output_dir: &str) {
-    println!("Begin un-archival of directory");
+pub fn unarchive_zip(input_filepath: &str) {
     let now = Instant::now();
 
-    println!("Iterate over block headers and decompress data segment");
-    decompress_files(input_filepath, output_dir);
+    let output_dir = get_parent_name(input_filepath);
+    let blocks = get_file_blocks(input_filepath);
+    decompress_files(&blocks, input_filepath, output_dir);
 
     let elapsed = now.elapsed();
-    println!("Finished un-archival in {:.2?}", elapsed);
+    println!("Finished unzipping in {:.2?}", elapsed);
 }
 
-fn decompress_files(archive_filepath: &str, output_dir: &str) {
+pub fn get_file_blocks(archive_filepath: &str) -> Vec<FileBlock> {
     let mut reader = FileReader::new(archive_filepath);
     if reader.read_u64() != SIG {
         panic!("File is not a zipr file");
     }
     // iterate through headers until the file separator byte is found or eof
+    let mut blocks = vec![];
     while !reader.eof() {
         let sep = reader.read_byte();
         if sep == GRP_SEP {
             break;
         }
         let block = reader.read_block();
+        blocks.push(block);
+    }
+    blocks
+}
+
+fn decompress_files(blocks: &Vec<FileBlock>, archive_filepath:&str, output_dir: &str) {
+    for block in blocks {
         decompress_file(&block, output_dir, archive_filepath);
     }
 }
 
 fn decompress_file(block: &FileBlock, output_dir: &str, archive_filepath: &str) {
     let unarchived_filename = &format!("{}{}{}", output_dir, path::MAIN_SEPARATOR, &block.filename_rel);
-    println!("Writing to {}", unarchived_filename);
 
     // read from the main archive jumping to the data segment
     let reader = &mut FileReader::new(archive_filepath);
     reader.seek_from_start((get_size_of(SIG) as u64) + block.file_byte_offset);
 
-    println!("Reading node structure for block {}", block.filename_rel);
     let root = read_node(reader);
 
-    println!("Writing decompressed symbols for block {}", block.filename_rel);
     let unarchived_parent = Path::new(unarchived_filename).parent().unwrap();
     fs::create_dir_all(unarchived_parent).expect("Couldn't create directories");
 
