@@ -9,11 +9,12 @@ pub struct Node {
     pub left: Option<Box<Node>>,
     pub right: Option<Box<Node>>,
     pub plain_symbol: u8,
-    pub weight: u32
+    pub weight: u64
 }
 
 impl Node {
-    pub fn leaf(symbol: u8, weight: u32) -> Node {
+    // creates a leaf structure with no children
+    pub fn leaf(symbol: u8, weight: u64) -> Node {
         Node {
             left: None,
             right: None,
@@ -22,7 +23,8 @@ impl Node {
         }
     }
 
-    pub fn internal(left: Box<Node>, right: Box<Node>, symbol: u8, weight: u32) -> Node {
+    // moves the left and right nodes
+    pub fn internal(left: Box<Node>, right: Box<Node>, symbol: u8, weight: u64) -> Node {
         Node {
             left: Some(Box::new(*left)),
             right: Some(Box::new(*right)),

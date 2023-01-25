@@ -3,11 +3,11 @@ use crate::read::FileReader;
 use crate::tree::Node;
 
 pub fn debug_binary_file(filepath: &str) {
-    let mut reader = FileReader::new(filepath).expect("Error creating file reader");
+    let mut reader = FileReader::new(filepath);
     println!();
     let mut c = 0;
     while !reader.eof() {
-        let bit = reader.read_bit().expect("Error reading bit from file");
+        let bit = reader.read_bit();
         print!("{}", bit);
         if (c + 1) % 4 == 0 {
             print!(" ");
@@ -17,13 +17,13 @@ pub fn debug_binary_file(filepath: &str) {
 }
 
 pub fn debug_tree_file(filepath: &str) {
-    let mut reader = FileReader::new(filepath).expect("Error creating file reader");
+    let mut reader = FileReader::new(filepath);
     println!();
     while !reader.eof() {
-        let bit = reader.read_bit().expect("Error reading bit from file");
+        let bit = reader.read_bit();
         print!("{}", bit);
         if bit > 0 {
-            let byte = reader.read_bits(8).expect("Error reading byte from file");
+            let byte = reader.read_bits(8);
             print!("{}", byte as char);
         }
     }
