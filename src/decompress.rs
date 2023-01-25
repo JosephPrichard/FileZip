@@ -6,21 +6,22 @@ use std::fs;
 use std::path;
 use std::path::{Path};
 use std::time::Instant;
-use crate::bitwise::SymbolCode;
-use crate::block::{FileBlock, list_file_blocks};
+use crate::block::{FileBlock};
 use crate::charset::{GRP_SEP, SIG};
 use crate::debug::debug_tree;
 use crate::read::FileReader;
 use crate::tree::Node;
+use crate::utils;
 use crate::utils::{get_parent_name, get_size_of};
 use crate::write::FileWriter;
 
 pub fn unarchive_zip(input_filepath: &str) {
     let now = Instant::now();
 
-    let output_dir = get_parent_name(input_filepath);
+    let output_dir = utils::get_no_ext(input_filepath);
+    fs::create_dir_all(&output_dir).expect("Couldn't create directory");
     let blocks = get_file_blocks(input_filepath);
-    decompress_files(&blocks, input_filepath, output_dir);
+    decompress_files(&blocks, input_filepath, &output_dir);
 
     let elapsed = now.elapsed();
     println!("Finished unzipping in {:.2?}", elapsed);
@@ -44,7 +45,7 @@ pub fn get_file_blocks(archive_filepath: &str) -> Vec<FileBlock> {
     blocks
 }
 
-fn decompress_files(blocks: &Vec<FileBlock>, archive_filepath:&str, output_dir: &str) {
+fn decompress_files(blocks: &[FileBlock], archive_filepath:&str, output_dir: &str) {
     for block in blocks {
         decompress_file(&block, output_dir, archive_filepath);
     }

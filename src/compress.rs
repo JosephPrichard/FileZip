@@ -3,7 +3,7 @@
 // Byte-by-byte file compressor
 
 use std::collections::{BinaryHeap};
-use std::{fs, path};
+use std::{fs};
 use std::path::{Path};
 use std::time::Instant;
 use crate::bitwise::SymbolCode;
@@ -17,13 +17,13 @@ use crate::write::FileWriter;
 
 const TABLE_SIZE: usize = 256;
 
-pub fn archive_dir(input_dir: &str) {
+pub fn archive_dir(input_entry: &[String]) {
     let now = Instant::now();
 
-    let mut blocks = get_file_blocks(input_dir);
+    let mut blocks = get_file_blocks(input_entry);
     create_code_books(&mut blocks);
 
-    let archive_filename = &format!("{}{}", input_dir, ".zipr");
+    let archive_filename = &format!("{}{}", input_entry[0], ".zipr");
     let writer = &mut FileWriter::new(archive_filename);
     writer.write_u64(SIG);
 
@@ -35,10 +35,12 @@ pub fn archive_dir(input_dir: &str) {
     block::list_file_blocks(&blocks);
 }
 
-fn get_file_blocks(dir: &str) -> Vec<FileBlock> {
+fn get_file_blocks(entries: &[String]) -> Vec<FileBlock> {
     let mut blocks = vec![];
-    let path = Path::new(dir);
-    walk_path(path.parent().expect("Failed to get parent path"), path, &mut blocks);
+    for entry in entries {
+        let path = Path::new(entry);
+        walk_path(path.parent().expect("Failed to get parent path"), path, &mut blocks);
+    }
     blocks
 }
 
@@ -47,24 +49,22 @@ fn walk_path(base_path: &Path, path: &Path, blocks: &mut Vec<FileBlock>) {
         for entry in fs::read_dir(path).expect("Can't read directory") {
             let entry = entry.expect("Entry is invalid");
             let path = entry.path();
-            if path.is_dir() {
-                walk_path(&base_path, &path, blocks);
-            } else {
-                let filename_abs = &String::from(path.to_str().unwrap());
-                let filename_rel = &String::from(path
-                    .strip_prefix(base_path)
-                    .expect("Couldn't strip prefix from path")
-                    .to_str()
-                    .unwrap());
-                let mut block = FileBlock::new(filename_rel, filename_abs);
-                block.original_byte_size = utils::dir_entry_size(&path);
-                blocks.push(block);
-            }
+            walk_path(&base_path, &path, blocks);
         }
+    } else {
+        let filename_abs = &String::from(path.to_str().unwrap());
+        let filename_rel = &String::from(path
+            .strip_prefix(base_path)
+            .expect("Couldn't strip prefix from path")
+            .to_str()
+            .unwrap());
+        let mut block = FileBlock::new(filename_rel, filename_abs);
+        block.original_byte_size = utils::dir_entry_size(&path);
+        blocks.push(block);
     }
 }
 
-fn create_code_books(blocks: &mut Vec<FileBlock>) {
+fn create_code_books(blocks: &mut [FileBlock]) {
     for block in blocks {
         create_code_book(block);
     }
@@ -88,7 +88,7 @@ fn create_code_book(block: &mut FileBlock) {
     block.code_book = Some(CodeBook { symbol_table, tree });
 }
 
-fn write_block_headers(writer: &mut FileWriter, blocks: &mut Vec<FileBlock>) {
+fn write_block_headers(writer: &mut FileWriter, blocks: &mut [FileBlock]) {
     // calculate the total block size for the header, including the grp sep byte
     let mut header_size = 1;
     for block in &*blocks {
@@ -110,7 +110,7 @@ fn write_block_headers(writer: &mut FileWriter, blocks: &mut Vec<FileBlock>) {
     writer.write_byte(GRP_SEP);
 }
 
-fn compress_files(writer: &mut FileWriter, blocks: &Vec<FileBlock>) {
+fn compress_files(writer: &mut FileWriter, blocks: &[FileBlock]) {
     for block in blocks {
         let code_book = block.code_book.as_ref().unwrap();
         write_node(writer, &code_book.tree.root);
@@ -132,7 +132,7 @@ fn write_node(writer: &mut FileWriter, node: &Box<Node>) {
     }
 }
 
-fn compress_file(input_filepath: &str, writer: &mut FileWriter, symbol_table: &Vec<SymbolCode>) {
+fn compress_file(input_filepath: &str, writer: &mut FileWriter, symbol_table: &[SymbolCode]) {
     let mut reader = FileReader::new(input_filepath);
     while !reader.eof() {
         let byte = reader.read_byte();
@@ -153,7 +153,7 @@ fn create_freq_table(input_filepath: &str) -> Vec<u64> {
     freq_table
 }
 
-fn create_code_tree(freq_table: &Vec<u64>) -> Tree {
+fn create_code_tree(freq_table: &[u64]) -> Tree {
     let mut heap = BinaryHeap::new();
 
     // add the frequency table nodes to priority queue
@@ -178,7 +178,7 @@ fn create_code_tree(freq_table: &Vec<u64>) -> Tree {
     Tree { root, symbol_count }
 }
 
-fn walk_code_tree(node: &Box<Node>, mut symbol_code: SymbolCode, symbol_table: &mut Vec<SymbolCode>) {
+fn walk_code_tree(node: &Box<Node>, mut symbol_code: SymbolCode, symbol_table: &mut [SymbolCode]) {
     if node.is_leaf() {
         symbol_code.plain_symbol = node.plain_symbol;
         symbol_table[usize::from(node.plain_symbol)] = symbol_code;

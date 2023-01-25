@@ -44,3 +44,10 @@ pub fn get_parent_name(dir: &str) -> &str {
         .to_str()
         .expect("Couldn't convert to string")
 }
+
+pub fn get_no_ext(path: &str) -> String {
+    Path::new(path)
+        .with_extension("")
+        .display()
+        .to_string()
+}
