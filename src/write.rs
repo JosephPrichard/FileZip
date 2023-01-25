@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 1/5/2023
+// File writer implementing a bit layer
+
 use std::fs::{File, OpenOptions};
 use std::io::{Write};
 use std::mem;

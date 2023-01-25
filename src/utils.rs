@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 1/5/2023
+// Utilities for files, sizes, and conversions
+
 use std::fs;
 use std::path::Path;
 

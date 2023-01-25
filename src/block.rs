@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 1/5/2023
+// Type definitions and utilities for blocks in an archive
+
 use crate::bitwise::SymbolCode;
 use crate::tree::Tree;
 use crate::utils::get_size_of;

@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 1/5/2023
+// Type definitions and utilities for the binary tree structure used for huffman coding
+
 use std::cmp::Ordering;
 
 pub struct Tree {

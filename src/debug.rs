@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 1/5/2023
+// Utilities used for debugging only
+
 use crate::bitwise::SymbolCode;
 use crate::read::FileReader;
 use crate::tree::Node;

@@ -1,6 +1,6 @@
 // Joseph Prichard
 // 1/5/2023
-// File reading and writing utilities
+// File reader implementing a bit layer
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
