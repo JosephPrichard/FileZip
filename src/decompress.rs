@@ -87,17 +87,14 @@ fn read_node(reader: &mut FileReader) -> Box<Node> {
 
 fn decompress_next_symbol(reader: &mut FileReader, writer: &mut FileWriter, node: &Box<Node>) {
     if node.is_leaf() {
-        println!(" {:?}", node.plain_symbol as char);
         writer.write_byte(node.plain_symbol);
     } else {
         let bit = reader.read_bit();
         if bit == 0 {
             let left = node.left.as_ref().expect("Expected left node to be Some");
-            print!("0");
             decompress_next_symbol(reader, writer, left);
         } else {
             let right = node.right.as_ref().expect("Expected right node to be Some");
-            print!("1");
             decompress_next_symbol(reader, writer, right);
         }
     }
