@@ -7,9 +7,8 @@ use std::{fs};
 use std::path::{Path};
 use std::time::Instant;
 use crate::bitwise::SymbolCode;
-use crate::debug::{debug_binary_file, debug_tree_file, debug_tree};
 use crate::block::{CodeBook, FileBlock};
-use crate::charset::{GRP_SEP, REC_SEP, SIG};
+use crate::charset;
 use crate::tree::{Node, Tree};
 use crate::read::FileReader;
 use crate::{block, utils};
@@ -25,7 +24,7 @@ pub fn archive_dir(input_entry: &[String]) {
 
     let archive_filename = &format!("{}{}", input_entry[0], ".zipr");
     let writer = &mut FileWriter::new(archive_filename);
-    writer.write_u64(SIG);
+    writer.write_u64(charset::SIG);
 
     write_block_headers(writer, &mut blocks);
     compress_files(writer, &blocks);
@@ -91,15 +90,15 @@ fn create_code_book(block: &mut FileBlock) {
 fn write_block_headers(writer: &mut FileWriter, blocks: &mut [FileBlock]) {
     // calculate the total block size for the header, including the grp sep byte
     let mut header_size = 1;
-    for block in &*blocks {
+    for block in blocks.iter_mut() {
         // header size plus an additional rec sep byte
         header_size += block.get_header_size() + 1;
     }
     // iterate through each block, calculate the file offset and write the block
     let mut total_offset = 0;
-    for block in &mut *blocks {
+    for block in blocks.iter_mut() {
         // write record sep to identify start of record
-        writer.write_byte(REC_SEP);
+        writer.write_byte(charset::REC_SEP);
         // calculate the file sizes and offsets for the block
         block.file_byte_offset = header_size + total_offset;
         total_offset += 1 + (block.data_bit_size + block.tree_bit_size) / 8;
@@ -107,28 +106,28 @@ fn write_block_headers(writer: &mut FileWriter, blocks: &mut [FileBlock]) {
         writer.write_block(block);
     }
     // write group sep after headers are complete
-    writer.write_byte(GRP_SEP);
+    writer.write_byte(charset::GRP_SEP);
 }
 
 fn compress_files(writer: &mut FileWriter, blocks: &[FileBlock]) {
     for block in blocks {
         let code_book = block.code_book.as_ref().unwrap();
-        write_node(writer, &code_book.tree.root);
+        write_tree(writer, &code_book.tree.root);
         compress_file(&block.filename_abs, writer, &code_book.symbol_table);
         writer.align_to_byte();
     }
 }
 
-fn write_node(writer: &mut FileWriter, node: &Box<Node>) {
+fn write_tree(writer: &mut FileWriter, node: &Box<Node>) {
     if node.is_leaf() {
         writer.write_bit(1);
         writer.write_bits(node.plain_symbol, 8);
     } else {
         writer.write_bit(0);
         let left = node.left.as_ref().expect("Expected left node to be Some");
-        write_node(writer, left);
+        write_tree(writer, left);
         let right = node.right.as_ref().expect("Expected right node to be Some");
-        write_node(writer, right);
+        write_tree(writer, right);
     }
 }
 
@@ -136,6 +135,7 @@ fn compress_file(input_filepath: &str, writer: &mut FileWriter, symbol_table: &[
     let mut reader = FileReader::new(input_filepath);
     while !reader.eof() {
         let byte = reader.read_byte();
+        let s = &symbol_table[byte as usize];
         writer.write_symbol(&symbol_table[byte as usize]);
     }
 }
@@ -147,7 +147,7 @@ fn create_freq_table(input_filepath: &str) -> Vec<u64> {
     let mut reader = FileReader::new(input_filepath);
     while !reader.eof() {
         let byte = reader.read_byte();
-        freq_table[usize::from(byte)] += 1;
+        freq_table[byte as usize] += 1;
     }
 
     freq_table
@@ -181,7 +181,7 @@ fn create_code_tree(freq_table: &[u64]) -> Tree {
 fn walk_code_tree(node: &Box<Node>, mut symbol_code: SymbolCode, symbol_table: &mut [SymbolCode]) {
     if node.is_leaf() {
         symbol_code.plain_symbol = node.plain_symbol;
-        symbol_table[usize::from(node.plain_symbol)] = symbol_code;
+        symbol_table[node.plain_symbol as usize] = symbol_code;
     }
     if let Some(left) = &node.left {
         let symbol_code = symbol_code.append_bit(0);

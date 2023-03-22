@@ -9,7 +9,7 @@ use crate::bitwise;
 use crate::bitwise::{get_bit, SymbolCode};
 use crate::block::{FileBlock};
 
-const BUFFER_LEN: usize = 512;
+const BUFFER_LEN: usize = 4096;
 const BUFFER_BIT_LEN: u32 = (BUFFER_LEN * 8) as u32;
 
 pub struct FileWriter {

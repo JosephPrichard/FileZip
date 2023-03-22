@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 1/5/2023
+// Application to compress or decompress files
+
 use std::env;
 
 mod compress;

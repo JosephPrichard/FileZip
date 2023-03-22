@@ -12,7 +12,6 @@ use crate::debug::debug_tree;
 use crate::read::FileReader;
 use crate::tree::Node;
 use crate::utils;
-use crate::utils::{get_parent_name, get_size_of};
 use crate::write::FileWriter;
 
 pub fn unarchive_zip(input_filepath: &str) {
@@ -56,7 +55,7 @@ fn decompress_file(block: &FileBlock, output_dir: &str, archive_filepath: &str) 
 
     // read from the main archive jumping to the data segment
     let reader = &mut FileReader::new(archive_filepath);
-    reader.seek_from_start((get_size_of(SIG) as u64) + block.file_byte_offset);
+    reader.seek_from_start((utils::get_size_of(SIG) as u64) + block.file_byte_offset);
 
     let root = read_node(reader);
 
@@ -68,7 +67,7 @@ fn decompress_file(block: &FileBlock, output_dir: &str, archive_filepath: &str) 
     let start_read_len = reader.read_len() as i64;
     while !reader.eof() {
         let read_len = reader.read_len() as i64;
-        if (read_len - start_read_len) >= block.data_bit_size as i64 {
+        if (read_len - start_read_len) > (block.data_bit_size as i64 - 8) {
             break;
         }
         decompress_next_symbol(reader, writer, &root);
@@ -88,14 +87,17 @@ fn read_node(reader: &mut FileReader) -> Box<Node> {
 
 fn decompress_next_symbol(reader: &mut FileReader, writer: &mut FileWriter, node: &Box<Node>) {
     if node.is_leaf() {
+        println!(" {:?}", node.plain_symbol as char);
         writer.write_byte(node.plain_symbol);
     } else {
         let bit = reader.read_bit();
         if bit == 0 {
             let left = node.left.as_ref().expect("Expected left node to be Some");
+            print!("0");
             decompress_next_symbol(reader, writer, left);
         } else {
             let right = node.right.as_ref().expect("Expected right node to be Some");
+            print!("1");
             decompress_next_symbol(reader, writer, right);
         }
     }
