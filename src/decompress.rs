@@ -6,9 +6,9 @@ use std::fs;
 use std::path;
 use std::path::{Path};
 use std::time::Instant;
-use crate::block::{FileBlock};
+use rayon::prelude::*;
+use crate::data::{FileBlock};
 use crate::charset::{GRP_SEP, SIG};
-use crate::debug::debug_tree;
 use crate::read::FileReader;
 use crate::tree::Node;
 use crate::utils;
@@ -44,10 +44,11 @@ pub fn get_file_blocks(archive_filepath: &str) -> Vec<FileBlock> {
     blocks
 }
 
-fn decompress_files(blocks: &[FileBlock], archive_filepath:&str, output_dir: &str) {
-    for block in blocks {
+fn decompress_files(blocks: &[FileBlock], archive_filepath: &str, output_dir: &str) {
+    // decompress each file, this can be parallelized because each function call writes to a different file
+    blocks.par_iter().for_each(|block | {
         decompress_file(&block, output_dir, archive_filepath);
-    }
+    });
 }
 
 fn decompress_file(block: &FileBlock, output_dir: &str, archive_filepath: &str) {

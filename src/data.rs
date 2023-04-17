@@ -6,12 +6,8 @@ use crate::bitwise::SymbolCode;
 use crate::tree::Tree;
 use crate::utils::get_size_of;
 
-pub struct CodeBook {
-    pub symbol_table: Vec<SymbolCode>,
-    pub tree: Tree
-}
-
-// a part of a compressed archive
+// represents the metadata of a file within a compressed archive
+#[derive(Clone)]
 pub struct FileBlock {
     // full name of file including path
     pub filename_abs: String,
@@ -24,10 +20,17 @@ pub struct FileBlock {
     // byte offset position of compressed data in archive
     pub file_byte_offset: u64,
     // original file size
-    pub original_byte_size: u64,
-    // code book for compressing the file to the archive
-    // a code book is optional because it isn't present in the block until created
-    pub code_book: Option<CodeBook>
+    pub original_byte_size: u64
+}
+
+// represents a codebook containing the data necessary to compress a file
+pub struct CodeBook {
+    // the symbol table of the file
+    pub symbol_table: Vec<SymbolCode>,
+    // the tree structure to compress symbols
+    pub tree: Tree,
+    // metadata of the file to be compressed
+    pub block: FileBlock
 }
 
 impl FileBlock {
@@ -38,8 +41,7 @@ impl FileBlock {
             tree_bit_size: 0,
             data_bit_size: 0,
             file_byte_offset: 0,
-            original_byte_size: 0,
-            code_book: None
+            original_byte_size: 0
         }
     }
 

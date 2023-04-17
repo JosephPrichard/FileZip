@@ -3,15 +3,16 @@
 // Byte-by-byte file compressor
 
 use std::collections::{BinaryHeap};
-use std::{fs};
+use std::fs;
 use std::path::{Path};
 use std::time::Instant;
+use rayon::prelude::*;
 use crate::bitwise::SymbolCode;
-use crate::block::{CodeBook, FileBlock};
+use crate::data::{CodeBook, FileBlock};
 use crate::charset;
 use crate::tree::{Node, Tree};
 use crate::read::FileReader;
-use crate::{block, utils};
+use crate::{data, utils};
 use crate::write::FileWriter;
 
 const TABLE_SIZE: usize = 256;
@@ -20,18 +21,18 @@ pub fn archive_dir(input_entry: &[String]) {
     let now = Instant::now();
 
     let mut blocks = get_file_blocks(input_entry);
-    create_code_books(&mut blocks);
+    let mut code_books = create_code_books(&mut blocks);
 
     let archive_filename = &format!("{}{}", input_entry[0], ".zipr");
     let writer = &mut FileWriter::new(archive_filename);
     writer.write_u64(charset::SIG);
 
-    write_block_headers(writer, &mut blocks);
-    compress_files(writer, &blocks);
+    write_block_headers(writer, &mut code_books);
+    compress_files(writer, &code_books);
 
     let elapsed = now.elapsed();
     println!("Finished zipping in {:.2?}", elapsed);
-    block::list_file_blocks(&blocks);
+    data::list_file_blocks(&blocks);
 }
 
 fn get_file_blocks(entries: &[String]) -> Vec<FileBlock> {
@@ -63,13 +64,14 @@ fn walk_path(base_path: &Path, path: &Path, blocks: &mut Vec<FileBlock>) {
     }
 }
 
-fn create_code_books(blocks: &mut [FileBlock]) {
-    for block in blocks {
-        create_code_book(block);
-    }
+fn create_code_books(blocks: &mut [FileBlock]) -> Vec<CodeBook> {
+    // create code books, this operation can be parallelized because it only reads
+    blocks.into_par_iter()
+        .map(|block| create_code_book(block))
+        .collect()
 }
 
-fn create_code_book(block: &mut FileBlock) {
+fn create_code_book(block: &mut FileBlock) -> CodeBook {
     let freq_table = create_freq_table(&block.filename_abs);
     let tree = create_code_tree(&freq_table);
     let symbol_table = create_code_table(&tree);
@@ -83,37 +85,40 @@ fn create_code_book(block: &mut FileBlock) {
         }
     }
     block.tree_bit_size += 10 * char_count - 1;
-    // add the code book to file block
-    block.code_book = Some(CodeBook { symbol_table, tree });
+    // create the prepared file block containing the code book
+    CodeBook {
+        symbol_table,
+        tree,
+        block: block.clone()
+    }
 }
 
-fn write_block_headers(writer: &mut FileWriter, blocks: &mut [FileBlock]) {
+fn write_block_headers(writer: &mut FileWriter, code_books: &mut [CodeBook]) {
     // calculate the total block size for the header, including the grp sep byte
     let mut header_size = 1;
-    for block in blocks.iter_mut() {
+    for code_book in code_books.iter_mut() {
         // header size plus an additional rec sep byte
-        header_size += block.get_header_size() + 1;
+        header_size += code_book.block.get_header_size() + 1;
     }
     // iterate through each block, calculate the file offset and write the block
     let mut total_offset = 0;
-    for block in blocks.iter_mut() {
+    for code_book in code_books.iter_mut() {
         // write record sep to identify start of record
         writer.write_byte(charset::REC_SEP);
         // calculate the file sizes and offsets for the block
-        block.file_byte_offset = header_size + total_offset;
-        total_offset += 1 + (block.data_bit_size + block.tree_bit_size) / 8;
+        code_book.block.file_byte_offset = header_size + total_offset;
+        total_offset += 1 + (code_book.block.data_bit_size + code_book.block.tree_bit_size) / 8;
         // write the block into memory
-        writer.write_block(block);
+        writer.write_block(&code_book.block);
     }
     // write group sep after headers are complete
     writer.write_byte(charset::GRP_SEP);
 }
 
-fn compress_files(writer: &mut FileWriter, blocks: &[FileBlock]) {
-    for block in blocks {
-        let code_book = block.code_book.as_ref().unwrap();
+fn compress_files(writer: &mut FileWriter, code_books: &[CodeBook]) {
+    for code_book in code_books {
         write_tree(writer, &code_book.tree.root);
-        compress_file(&block.filename_abs, writer, &code_book.symbol_table);
+        compress_file(&code_book.block.filename_abs, writer, &code_book.symbol_table);
         writer.align_to_byte();
     }
 }
@@ -135,7 +140,6 @@ fn compress_file(input_filepath: &str, writer: &mut FileWriter, symbol_table: &[
     let mut reader = FileReader::new(input_filepath);
     while !reader.eof() {
         let byte = reader.read_byte();
-        let s = &symbol_table[byte as usize];
         writer.write_symbol(&symbol_table[byte as usize]);
     }
 }

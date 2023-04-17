@@ -7,7 +7,7 @@ use std::io::{Write};
 use std::mem;
 use crate::bitwise;
 use crate::bitwise::{get_bit, SymbolCode};
-use crate::block::{FileBlock};
+use crate::data::{FileBlock};
 
 const BUFFER_LEN: usize = 4096;
 const BUFFER_BIT_LEN: u32 = (BUFFER_LEN * 8) as u32;
