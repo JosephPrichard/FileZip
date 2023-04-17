@@ -24,6 +24,11 @@ Lists the sizes, compression ratios, and relative file name of any files in the 
 
 ../path/to/zipper.exe -l ../path/to/archive.zipr
 
+### Multihreading
+Adds multithreaded parallelism using Rayon's threadpool. Uses the max number of cores as the thread pool count, although this isn't guaranteed to actually use all cores in the system (unless you have no other processes being executed).
+
+../path/to/zipper.exe -c -mt ../path/to/directory
+
 ## Example
 ![image](https://user-images.githubusercontent.com/58538077/216788857-6a19c6a2-5770-4857-8392-3fd70f22594b.png)
 
