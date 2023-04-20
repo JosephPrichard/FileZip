@@ -18,7 +18,7 @@ pub struct FileWriter {
     // a buffer storing a block to be written to the file
     buffer: [u8; BUFFER_LEN],
     // the bit position of the last write in the buffer
-    bit_position: u32
+    bit_position: u32,
 }
 
 impl FileWriter {
@@ -31,7 +31,7 @@ impl FileWriter {
                 .open(filepath)
                 .expect("Failed to open file for new writer"),
             buffer: [0u8; BUFFER_LEN],
-            bit_position: 0
+            bit_position: 0,
         }
     }
 

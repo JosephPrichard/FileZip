@@ -42,7 +42,7 @@ pub fn get_dir_name(dir: &str) -> &str {
 }
 
 pub fn get_parent_name(dir: &str) -> &str {
-     Path::new(dir)
+    Path::new(dir)
         .parent()
         .expect("Couldn't get parent")
         .to_str()

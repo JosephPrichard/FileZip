@@ -6,14 +6,14 @@ use std::cmp::Ordering;
 
 pub struct Tree {
     pub root: Box<Node>,
-    pub symbol_count: u32
+    pub symbol_count: u32,
 }
 
 pub struct Node {
     pub left: Option<Box<Node>>,
     pub right: Option<Box<Node>>,
     pub plain_symbol: u8,
-    pub weight: u64
+    pub weight: u64,
 }
 
 impl Node {
@@ -23,7 +23,7 @@ impl Node {
             left: None,
             right: None,
             plain_symbol: symbol,
-            weight
+            weight,
         }
     }
 
@@ -33,7 +33,7 @@ impl Node {
             left: Some(Box::new(*left)),
             right: Some(Box::new(*right)),
             plain_symbol: symbol,
-            weight
+            weight,
         }
     }
 

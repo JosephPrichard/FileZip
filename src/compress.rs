@@ -9,7 +9,7 @@ use std::time::Instant;
 use rayon::prelude::*;
 use crate::bitwise::SymbolCode;
 use crate::data::{CodeBook, FileBlock};
-use crate::charset;
+use crate::{charset, parallelism};
 use crate::tree::{Node, Tree};
 use crate::read::FileReader;
 use crate::{data, utils};
@@ -17,16 +17,24 @@ use crate::write::FileWriter;
 
 const TABLE_SIZE: usize = 256;
 
-pub fn archive_dir(input_entry: &[String]) {
+pub fn archive_dir(input_entry: &[String], multithreaded: bool) {
     let now = Instant::now();
 
+    // get the blocks for each file we need to compress
     let mut blocks = get_file_blocks(input_entry);
+
+    // configure parallelism
+    parallelism::configure_thread_pool(multithreaded, blocks.len());
+
+    // generate code books (parallelized)
     let mut code_books = create_code_books(&mut blocks);
 
+    // create the output archive file and its writer
     let archive_filename = &format!("{}{}", input_entry[0], ".zipr");
     let writer = &mut FileWriter::new(archive_filename);
     writer.write_u64(charset::SIG);
 
+    // write the headers to the file, and then compress each file into the output archive
     write_block_headers(writer, &mut code_books);
     compress_files(writer, &code_books);
 
@@ -89,7 +97,7 @@ fn create_code_book(block: &mut FileBlock) -> CodeBook {
     CodeBook {
         symbol_table,
         tree,
-        block: block.clone()
+        block: block.clone(),
     }
 }
 

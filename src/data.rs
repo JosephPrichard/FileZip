@@ -20,7 +20,7 @@ pub struct FileBlock {
     // byte offset position of compressed data in archive
     pub file_byte_offset: u64,
     // original file size
-    pub original_byte_size: u64
+    pub original_byte_size: u64,
 }
 
 // represents a codebook containing the data necessary to compress a file
@@ -30,7 +30,7 @@ pub struct CodeBook {
     // the tree structure to compress symbols
     pub tree: Tree,
     // metadata of the file to be compressed
-    pub block: FileBlock
+    pub block: FileBlock,
 }
 
 impl FileBlock {
@@ -41,7 +41,7 @@ impl FileBlock {
             tree_bit_size: 0,
             data_bit_size: 0,
             file_byte_offset: 0,
-            original_byte_size: 0
+            original_byte_size: 0,
         }
     }
 

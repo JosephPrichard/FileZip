@@ -20,7 +20,7 @@ pub struct FileReader {
     // the bit position of the last read in the buffer
     bit_position: u32,
     // the total number of bits read
-    read_len: u64
+    read_len: u64,
 }
 
 impl FileReader {
@@ -38,7 +38,7 @@ impl FileReader {
             buffer,
             read_size,
             bit_position: 0,
-            read_len: 0
+            read_len: 0,
         }
     }
 

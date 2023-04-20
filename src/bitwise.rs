@@ -6,7 +6,7 @@
 pub struct SymbolCode {
     pub plain_symbol: u8,
     pub encoded_symbol: u32,
-    pub bit_len: u8
+    pub bit_len: u8,
 }
 
 impl SymbolCode {
@@ -18,7 +18,7 @@ impl SymbolCode {
         SymbolCode {
             plain_symbol: self.plain_symbol,
             encoded_symbol: self.encoded_symbol ^ (bit << self.bit_len),
-            bit_len: self.bit_len + 1
+            bit_len: self.bit_len + 1,
         }
     }
 }

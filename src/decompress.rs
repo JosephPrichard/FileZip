@@ -9,17 +9,24 @@ use std::time::Instant;
 use rayon::prelude::*;
 use crate::data::{FileBlock};
 use crate::charset::{GRP_SEP, SIG};
+use crate::parallelism;
 use crate::read::FileReader;
 use crate::tree::Node;
 use crate::utils;
 use crate::write::FileWriter;
 
-pub fn unarchive_zip(input_filepath: &str) {
+pub fn unarchive_zip(input_filepath: &str, multithreaded: bool) {
     let now = Instant::now();
 
+    // extract blocks from the file
     let output_dir = utils::get_no_ext(input_filepath);
     fs::create_dir_all(&output_dir).expect("Couldn't create directory");
     let blocks = get_file_blocks(input_filepath);
+
+    // configure parallelism
+    parallelism::configure_thread_pool(multithreaded, blocks.len());
+
+    // decompress files
     decompress_files(&blocks, input_filepath, &output_dir);
 
     let elapsed = now.elapsed();
@@ -46,7 +53,7 @@ pub fn get_file_blocks(archive_filepath: &str) -> Vec<FileBlock> {
 
 fn decompress_files(blocks: &[FileBlock], archive_filepath: &str, output_dir: &str) {
     // decompress each file, this can be parallelized because each function call writes to a different file
-    blocks.par_iter().for_each(|block | {
+    blocks.par_iter().for_each(|block| {
         decompress_file(&block, output_dir, archive_filepath);
     });
 }
