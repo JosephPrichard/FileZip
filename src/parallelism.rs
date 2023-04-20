@@ -14,7 +14,7 @@ pub fn configure_thread_pool(multithreaded: bool, file_count: usize) {
     rayon::ThreadPoolBuilder::new()
         .num_threads(threads)
         .build_global()
-        .unwrap();
+        .expect("Failed to configure thread pool");
 
     println!("Running with {} threads", threads);
 }
