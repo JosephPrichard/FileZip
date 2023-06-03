@@ -12,23 +12,24 @@ The archive file is broken up into two segments: the file header segment and the
 ### Compress
 Compresses each file into an archive using the compression strategy described above. Recursively adds sub-directories to archive.
 
-../path/to/zipper.exe -c ../path/to/directory ../path/to/file.txt
+```../path/to/zipper.exe -c ../path/to/directory ../path/to/file.txt```
 
 ### Decompress
 Decompresses the archive into the stored directory strcture using the decompression strategy desribed above.
 
-../path/to/zipper.exe -d ../path/to/archive.zipr
+```../path/to/zipper.exe -d ../path/to/archive.zipr```
 
 ### List
 Lists the sizes, compression ratios, and relative file name of any files in the archive. 
 
-../path/to/zipper.exe -l ../path/to/archive.zipr
+```../path/to/zipper.exe -l ../path/to/archive.zipr```
 
 ### Multihreading
 Adds multithreaded parallelism using Rayon's threadpool. Uses the max number of cores as the thread pool count, although this isn't guaranteed to actually use all cores in the system (unless you have no other processes being executed).
 
-../path/to/zipper.exe -c -mt ../path/to/directory
+```../path/to/zipper.exe -c -mt ../path/to/directory```
 
 ## Example
-![image](https://user-images.githubusercontent.com/58538077/216788857-6a19c6a2-5770-4857-8392-3fd70f22594b.png)
+![image](https://github.com/JosephPrichard/Zipper/assets/58538077/6d8365f2-a7a8-45b1-96d3-632350a65184)
+
 
