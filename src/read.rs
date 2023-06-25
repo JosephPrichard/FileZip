@@ -75,7 +75,7 @@ impl FileReader {
         self.buffer[(self.bit_position / 8) as usize]
     }
 
-    pub fn read_byte(&mut self) -> u8 {
+    pub fn read_aligned_byte(&mut self) -> u8 {
         let byte = self.view_byte();
         self.bit_position += 8;
         self.read_len += 8;
@@ -103,11 +103,11 @@ impl FileReader {
 
     pub fn read_block(&mut self) -> FileBlock {
         // reads string as bytes from file
-        let mut filename_rel = String::new();
-        let mut byte = self.read_byte();
+        let mut filename_rel = String::from("/");
+        let mut byte = self.read_aligned_byte();
         while byte != 0 {
             filename_rel.push(byte as char);
-            byte = self.read_byte();
+            byte = self.read_aligned_byte();
         }
         // create block and read u64 values from file into fields
         let mut block = FileBlock::new(&filename_rel, "");
@@ -121,7 +121,7 @@ impl FileReader {
     pub fn read_u64(&mut self) -> u64 {
         let mut buffer = [0u8; 8];
         for i in 0..8 {
-            buffer[i] = self.read_byte();
+            buffer[i] = self.read_aligned_byte();
         }
         u64::from_le_bytes(buffer)
     }

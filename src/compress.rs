@@ -20,21 +20,16 @@ const TABLE_SIZE: usize = 256;
 pub fn archive_dir(input_entry: &[String], multithreaded: bool) {
     let now = Instant::now();
 
-    // get the blocks for each file we need to compress
     let mut blocks = get_file_blocks(input_entry);
 
-    // configure parallelism
     parallelism::configure_thread_pool(multithreaded, blocks.len());
 
-    // generate code books (parallelized)
     let mut code_books = create_code_books(&mut blocks);
 
-    // create the output archive file and its writer
-    let archive_filename = &format!("{}{}", input_entry[0], ".zipr");
-    let writer = &mut FileWriter::new(archive_filename);
+    let archive_filename = String::from(&input_entry[0]) + ".zipr";
+    let writer = &mut FileWriter::new(&archive_filename);
     writer.write_u64(charset::SIG);
 
-    // write the headers to the file, and then compress each file into the output archive
     write_block_headers(writer, &mut code_books);
     compress_files(writer, &code_books);
 
@@ -82,12 +77,12 @@ fn create_code_books(blocks: &mut [FileBlock]) -> Vec<CodeBook> {
 fn create_code_book(block: &mut FileBlock) -> CodeBook {
     let freq_table = create_freq_table(&block.filename_abs);
     let tree = create_code_tree(&freq_table);
-    let symbol_table = create_code_table(&tree);
+    let symbol_table = Box::new(create_code_table(&tree));
     // calculate the bit size for the file block for compressed data and for tree
     let mut char_count = 0;
     for i in 0..TABLE_SIZE {
-        let freq = freq_table[i as usize];
-        block.data_bit_size += freq * (symbol_table[i as usize].bit_len as u64);
+        let freq = freq_table[i];
+        block.data_bit_size += freq * (symbol_table[i].bit_len as u64);
         if freq > 0 {
             char_count += 1;
         }
@@ -108,15 +103,15 @@ fn write_block_headers(writer: &mut FileWriter, code_books: &mut [CodeBook]) {
         // header size plus an additional rec sep byte
         header_size += code_book.block.get_header_size() + 1;
     }
-    // iterate through each block, calculate the file offset and write the block
+
     let mut total_offset = 0;
     for code_book in code_books.iter_mut() {
         // write record sep to identify start of record
         writer.write_byte(charset::REC_SEP);
-        // calculate the file sizes and offsets for the block
+
         code_book.block.file_byte_offset = header_size + total_offset;
         total_offset += 1 + (code_book.block.data_bit_size + code_book.block.tree_bit_size) / 8;
-        // write the block into memory
+
         writer.write_block(&code_book.block);
     }
     // write group sep after headers are complete
@@ -126,7 +121,7 @@ fn write_block_headers(writer: &mut FileWriter, code_books: &mut [CodeBook]) {
 fn compress_files(writer: &mut FileWriter, code_books: &[CodeBook]) {
     for code_book in code_books {
         write_tree(writer, &code_book.tree.root);
-        compress_file(&code_book.block.filename_abs, writer, &code_book.symbol_table);
+        compress_file(&code_book.block.filename_abs, writer, code_book.symbol_table.as_ref());
         writer.align_to_byte();
     }
 }
@@ -147,18 +142,18 @@ fn write_tree(writer: &mut FileWriter, node: &Box<Node>) {
 fn compress_file(input_filepath: &str, writer: &mut FileWriter, symbol_table: &[SymbolCode]) {
     let mut reader = FileReader::new(input_filepath);
     while !reader.eof() {
-        let byte = reader.read_byte();
+        let byte = reader.read_aligned_byte();
         writer.write_symbol(&symbol_table[byte as usize]);
     }
 }
 
-fn create_freq_table(input_filepath: &str) -> Vec<u64> {
-    let mut freq_table = vec![0u64; TABLE_SIZE];
+fn create_freq_table(input_filepath: &str) -> [u64; TABLE_SIZE] {
+    let mut freq_table = [0u64; TABLE_SIZE];
 
     // iterate through each byte in the file and increment count
     let mut reader = FileReader::new(input_filepath);
     while !reader.eof() {
-        let byte = reader.read_byte();
+        let byte = reader.read_aligned_byte();
         freq_table[byte as usize] += 1;
     }
 
@@ -205,9 +200,9 @@ fn walk_code_tree(node: &Box<Node>, mut symbol_code: SymbolCode, symbol_table: &
     }
 }
 
-fn create_code_table(tree: &Tree) -> Vec<SymbolCode> {
+fn create_code_table(tree: &Tree) -> [SymbolCode; TABLE_SIZE] {
     let symbol_code = SymbolCode::new();
-    let mut symbol_table = vec![symbol_code; TABLE_SIZE];
+    let mut symbol_table = [symbol_code; TABLE_SIZE];
     walk_code_tree(&tree.root, symbol_code, &mut symbol_table);
     symbol_table
 }

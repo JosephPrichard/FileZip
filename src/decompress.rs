@@ -18,15 +18,12 @@ use crate::write::FileWriter;
 pub fn unarchive_zip(input_filepath: &str, multithreaded: bool) {
     let now = Instant::now();
 
-    // extract blocks from the file
     let output_dir = utils::get_no_ext(input_filepath);
     fs::create_dir_all(&output_dir).expect("Couldn't create directory");
     let blocks = get_file_blocks(input_filepath);
 
-    // configure parallelism
     parallelism::configure_thread_pool(multithreaded, blocks.len());
 
-    // decompress files
     decompress_files(&blocks, input_filepath, &output_dir);
 
     let elapsed = now.elapsed();
@@ -41,7 +38,7 @@ pub fn get_file_blocks(archive_filepath: &str) -> Vec<FileBlock> {
     // iterate through headers until the file separator byte is found or eof
     let mut blocks = vec![];
     while !reader.eof() {
-        let sep = reader.read_byte();
+        let sep = reader.read_aligned_byte();
         if sep == GRP_SEP {
             break;
         }
@@ -85,6 +82,7 @@ fn decompress_file(block: &FileBlock, output_dir: &str, archive_filepath: &str) 
 fn read_node(reader: &mut FileReader) -> Box<Node> {
     let bit = reader.read_bit();
     if bit == 1 {
+        // read 8 unaligned bits
         Box::new(Node::leaf(reader.read_bits(8), 0))
     } else {
         let left = read_node(reader);
