@@ -28,8 +28,10 @@ fn main() {
     // parse arguments to program
     for i in 1..args.len() {
         let arg = &args[i];
-        // check the arg type
-        if arg.chars().nth(0).unwrap() == '-' {
+        // invariant: a program argument must have at least 1 character
+        let first = arg.chars().nth(0).expect("Expected an argument to be at least 1 char");
+        // check the arg type with
+        if first == '-' {
             // if the arg begins with a -, then the arg is a flag
             let flag = String::from(arg);
             if flag == "-mt" {

@@ -20,8 +20,7 @@ pub fn archive_dir(input_entry: &[String], multithreaded: bool) -> io::Result<()
 
     let mut blocks = get_file_blocks(input_entry)?;
 
-    parallelism::configure_thread_pool(multithreaded, blocks.len());
-
+    parallelism::configure_thread_pool(multithreaded, blocks.len())?;
     let mut code_books = create_code_books(&mut blocks)?;
 
     let archive_filename = String::from(&input_entry[0]) + ".zipr";
@@ -42,7 +41,11 @@ fn get_file_blocks(entries: &[String]) -> io::Result<Vec<FileBlock>> {
     let mut blocks = vec![];
     for entry in entries {
         let path = Path::new(entry);
-        walk_path(path.parent().expect("Failed to get parent path"), path, &mut blocks)?;
+        let base_path = match path.parent() {
+            Some(p) => p,
+            None => Path::new("") // a root has no base path
+        };
+        walk_path(base_path, path, &mut blocks)?;
     }
     Ok(blocks)
 }
@@ -56,12 +59,15 @@ fn walk_path(base_path: &Path, path: &Path, blocks: &mut Vec<FileBlock>) -> io::
         }
         Ok(())
     } else {
-        let filename_abs = &String::from(path.to_str().unwrap());
+        // invariant: a valid path is also a valid string in this context
+        let filename_abs = &String::from(path.to_str()
+            .expect("Expected file path to be valid string"));
+        // invariant: the base path must be a valid prefix of the path and an empty string is always a valid prefix
         let filename_rel = &String::from(path
             .strip_prefix(base_path)
-            .unwrap()
+            .expect("Expected base path to be a valid prefix of lower path")
             .to_str()
-            .unwrap());
+            .expect("Expected file path to be valid string"));
         let size = utils::dir_entry_size(&path);
         let block = FileBlock::from_fs_metadata(filename_rel, filename_abs, size);
         blocks.push(block);
@@ -193,14 +199,17 @@ fn create_code_tree(freq_table: &[u64]) -> CodeTree {
     // huffman coding algorithm
     while heap.len() >= 2 {
         // invariant: the heap should never have 1 or 0 elements at this point
-        let first_node = heap.pop().expect("First node is None");
-        let second_node = heap.pop().expect("Second node is None");
+        let first_node = heap.pop()
+            .expect("Expected first node to be Some after checking length");
+        let second_node = heap.pop()
+            .expect("Expected second node to be Some after checking length");
         let w = first_node.weight + second_node.weight;
         heap.push(Box::new(Tree::internal(first_node, second_node, 0, w)));
     }
 
     // invariant: the heap should not be empty after the huffman coding algorithm is finished
-    let root = heap.pop().expect("Heap is empty after algorithm");
+    let root = heap.pop()
+        .expect("Expected heap to have at least one element after huffman coding algorithm");
     CodeTree { root, symbol_count }
 }
 

@@ -25,8 +25,7 @@ pub fn unarchive_zip(input_filepath: &str, multithreaded: bool) -> io::Result<()
     let blocks_reader = &mut FileReader::new(input_filepath)?;
     let blocks = get_file_blocks(blocks_reader)?;
 
-    parallelism::configure_thread_pool(multithreaded, blocks.len());
-
+    parallelism::configure_thread_pool(multithreaded, blocks.len())?;
     decompress_files(&blocks, input_filepath, &output_dir)?;
 
     let elapsed = now.elapsed();
@@ -61,8 +60,9 @@ fn decompress_files(blocks: &[FileBlock], archive_filepath: &str, output_dir: &s
 
 fn decompress_file(block: &FileBlock, archive_filepath: &str, output_dir: &str) -> io::Result<()> {
     let unarchived_filename = &format!("{}{}{}", output_dir, path::MAIN_SEPARATOR, &block.filename_rel);
-    let unarchived_parent = Path::new(unarchived_filename).parent().unwrap();
-    fs::create_dir_all(unarchived_parent)?;
+    if let Some(unarchived_parent) = Path::new(unarchived_filename).parent() {
+        fs::create_dir_all(unarchived_parent)?;
+    }
 
     let writer = &mut FileWriter::new(unarchived_filename)?;
     let reader = &mut FileReader::new(archive_filepath)?;
