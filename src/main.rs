@@ -2,7 +2,8 @@
 // 1/5/2023
 // Application to compress or decompress files
 
-use std::env;
+use std::{env, io};
+use crate::read::FileReader;
 
 mod compress;
 mod read;
@@ -46,16 +47,34 @@ fn main() {
         println!("Needs at least one file path as an argument");
         return;
     }
-    let last = entries.len() - 1;
 
+    let flags = ExecFlags {
+        exec_flag: &exec_flag,
+        has_mt_flag,
+    };
+    match exec_cli(&flags, &entries) {
+        Ok(()) => println!("Finished execution with success code"),
+        Err(e) => panic!("IO error occurred during execution: {}", e.to_string())
+    }
+}
+
+struct ExecFlags<'a> {
+    exec_flag: &'a str,
+    has_mt_flag: bool
+}
+
+fn exec_cli<'a>(exec_flags: &'a ExecFlags, entries: &Vec<String>) -> io::Result<()> {
+    let last = entries.len() - 1;
     // execute a different command based on flag
-    match exec_flag.as_str() {
-        "-l" => {
-            let blocks = &decompress::get_file_blocks(&entries[last]);
+    match exec_flags.exec_flag {
+        "-l" | "list" => {
+            let arg = &entries[last];
+            let blocks_reader = &mut FileReader::new(arg)?;
+            let blocks = &decompress::get_file_blocks(blocks_reader)?;
             data::list_file_blocks(blocks);
+            Ok(())
         }
-        "-d" => decompress::unarchive_zip(&entries[last], has_mt_flag),
-        "-c" => compress::archive_dir(&entries, has_mt_flag),
-        _ => compress::archive_dir(&entries, has_mt_flag)
+        "-d" | "decompress" => decompress::unarchive_zip(&entries[last], exec_flags.has_mt_flag),
+        "-c" | "compress" | _ => compress::archive_dir(&entries, exec_flags.has_mt_flag),
     }
 }

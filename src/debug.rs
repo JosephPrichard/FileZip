@@ -3,15 +3,17 @@
 // Utilities used for debugging only
 
 use crate::bitwise::SymbolCode;
-use crate::read::FileReader;
-use crate::tree::Node;
+use crate::read::{BitwiseReader, FileReader};
+use crate::tree::Tree;
 
 pub fn debug_binary_file(filepath: &str) {
-    let mut reader = FileReader::new(filepath);
+    let mut reader = FileReader::new(filepath)
+        .expect("Cannot create reader in debugger");
     println!();
     let mut c = 0;
     while !reader.eof() {
-        let bit = reader.read_bit();
+        let bit = reader.read_bit()
+            .expect("Cannot read bit in debugger");
         print!("{}", bit);
         if (c + 1) % 4 == 0 {
             print!(" ");
@@ -21,19 +23,22 @@ pub fn debug_binary_file(filepath: &str) {
 }
 
 pub fn debug_tree_file(filepath: &str) {
-    let mut reader = FileReader::new(filepath);
+    let mut reader = FileReader::new(filepath)
+        .expect("Cannot create reader in debugger");
     println!();
     while !reader.eof() {
-        let bit = reader.read_bit();
+        let bit = reader.read_bit()
+            .expect("Cannot read bit in debugger");
         print!("{}", bit);
         if bit > 0 {
-            let byte = reader.read_bits(8);
+            let byte = reader.read_bits(8)
+                .expect("Cannot read bits in debugger");
             print!("{}", byte as char);
         }
     }
 }
 
-pub fn debug_tree(node: &Box<Node>, symbol_code: SymbolCode) {
+pub fn debug_tree(node: &Box<Tree>, symbol_code: SymbolCode) {
     if node.is_leaf() {
         println!("Leaf: {:#b} {} {}", symbol_code.encoded_symbol, symbol_code.bit_len, node.plain_symbol as char);
     }

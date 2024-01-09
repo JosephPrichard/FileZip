@@ -4,22 +4,22 @@
 
 use std::cmp::Ordering;
 
-pub struct Tree {
-    pub root: Box<Node>,
+pub struct CodeTree {
+    pub root: Box<Tree>,
     pub symbol_count: u32,
 }
 
-pub struct Node {
-    pub left: Option<Box<Node>>,
-    pub right: Option<Box<Node>>,
+pub struct Tree {
+    pub left: Option<Box<Tree>>,
+    pub right: Option<Box<Tree>>,
     pub plain_symbol: u8,
     pub weight: u64,
 }
 
-impl Node {
+impl Tree {
     // creates a leaf structure with no children
-    pub fn leaf(symbol: u8, weight: u64) -> Node {
-        Node {
+    pub fn leaf(symbol: u8, weight: u64) -> Tree {
+        Tree {
             left: None,
             right: None,
             plain_symbol: symbol,
@@ -28,8 +28,8 @@ impl Node {
     }
 
     // moves the left and right nodes
-    pub fn internal(left: Box<Node>, right: Box<Node>, symbol: u8, weight: u64) -> Node {
-        Node {
+    pub fn internal(left: Box<Tree>, right: Box<Tree>, symbol: u8, weight: u64) -> Tree {
+        Tree {
             left: Some(Box::new(*left)),
             right: Some(Box::new(*right)),
             plain_symbol: symbol,
@@ -42,21 +42,21 @@ impl Node {
     }
 }
 
-impl Eq for Node {}
+impl Eq for Tree {}
 
-impl PartialEq<Self> for Node {
+impl PartialEq<Self> for Tree {
     fn eq(&self, other: &Self) -> bool {
         self.weight == other.weight
     }
 }
 
-impl PartialOrd<Self> for Node {
+impl PartialOrd<Self> for Tree {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(&other))
     }
 }
 
-impl Ord for Node {
+impl Ord for Tree {
     fn cmp(&self, other: &Self) -> Ordering {
         other.weight.cmp(&self.weight)
     }

@@ -3,12 +3,25 @@
 // File reader implementing a bit layer
 
 use std::fs::File;
+use std::io;
 use std::io::{Read, Seek, SeekFrom};
 use crate::bitwise;
-use crate::data::{FileBlock};
+use crate::data::{FileBitSize, FileBlock};
 
 const BUFFER_LEN: usize = 4096;
 const BUFFER_BIT_LEN: u32 = (BUFFER_LEN * 8) as u32;
+
+pub trait BitwiseReader {
+    fn seek_from_start(&mut self, seek_pos: u64) -> io::Result<()>;
+    fn read_len(&mut self) -> u64;
+    fn eof(&mut self) -> bool;
+    fn view_byte(&mut self) -> io::Result<u8>;
+    fn read_aligned_byte(&mut self) -> io::Result<u8>;
+    fn read_bits(&mut self, count: u8) -> io::Result<u8>;
+    fn read_bit(&mut self) -> io::Result<u8>;
+    fn read_block(&mut self) -> io::Result<FileBlock>;
+    fn read_u64(&mut self) -> io::Result<u64>;
+}
 
 pub struct FileReader {
     // the file stream to read from
@@ -24,105 +37,109 @@ pub struct FileReader {
 }
 
 impl FileReader {
-    pub fn new(filepath: &str) -> FileReader {
+    pub fn new(filepath: &str) -> io::Result<FileReader> {
         // open the file into memory
-        let mut file = File::open(filepath)
-            .expect("Failed to create file for new reader");
+        let mut file = File::open(filepath)?;
         // read the first buffer into memory
         let mut buffer = [0u8; BUFFER_LEN];
-        let read_size = file.read(&mut buffer)
-            .expect("Failed to read buffer for new reader");
+        let read_size = file.read(&mut buffer)?;
         // copy necessary resources into the struct
-        FileReader {
+        Ok(FileReader {
             file,
             buffer,
             read_size,
             bit_position: 0,
             read_len: 0,
+        })
+    }
+
+    fn update_buffer(&mut self) -> io::Result<()> {
+        // at end of buffer: read a new buffer
+        if self.bit_position >= BUFFER_BIT_LEN {
+            self.read_size = self.file.read(&mut self.buffer)?;
+            self.bit_position = 0;
         }
+        Ok(())
     }
+}
 
-    pub fn seek_from_start(&mut self, seek_pos: u64) {
+impl BitwiseReader for FileReader {
+    fn seek_from_start(&mut self, seek_pos: u64) -> io::Result<()> {
         // seeks to location in the file for next read
-        self.file.seek(SeekFrom::Start(seek_pos))
-            .expect("Failed to seek to location in reader");
+        self.file.seek(SeekFrom::Start(seek_pos))?;
         // force a read to override the current buffer
-        self.read_size = self.file.read(&mut self.buffer)
-            .expect("Failed to read buffer in update");
+        self.read_size = self.file.read(&mut self.buffer)?;
         self.bit_position = 0;
+        Ok(())
     }
 
-    pub fn read_len(&mut self) -> u64 {
+    fn read_len(&mut self) -> u64 {
         self.read_len
     }
 
-    pub fn eof(&mut self) -> bool {
+    fn eof(&mut self) -> bool {
         // eof: if buffer pointer goes past read size or last buffer read was empty
         (self.bit_position > (8 * self.read_size) as u32) || self.read_size == 0
     }
 
-    fn update_buffer(&mut self) {
-        // at end of buffer: read a new buffer
-        if self.bit_position >= BUFFER_BIT_LEN {
-            self.read_size = self.file.read(&mut self.buffer)
-                .expect("Failed to read buffer in update");
-            self.bit_position = 0;
-        }
+    fn view_byte(&mut self) -> io::Result<u8> {
+        self.update_buffer()?;
+        let byte = self.buffer[(self.bit_position / 8) as usize];
+        Ok(byte)
     }
 
-    pub fn view_byte(&mut self) -> u8 {
-        self.update_buffer();
-        self.buffer[(self.bit_position / 8) as usize]
-    }
-
-    pub fn read_aligned_byte(&mut self) -> u8 {
+    fn read_aligned_byte(&mut self) -> io::Result<u8> {
         let byte = self.view_byte();
         self.bit_position += 8;
         self.read_len += 8;
         byte
     }
 
-    pub fn read_bits(&mut self, count: u8) -> u8 {
+    fn read_bits(&mut self, count: u8) -> io::Result<u8> {
         // read each bit individually as they might end up in different bytes in the buffer
         let mut byte = 0;
         for i in 0..count {
-            if self.read_bit() > 0 {
+            if self.read_bit()? > 0 {
                 byte = bitwise::set_bit(byte as u32, i as u32);
             }
         }
-        byte
+        Ok(byte)
     }
 
-    pub fn read_bit(&mut self) -> u8 {
-        let byte = self.view_byte();
+    fn read_bit(&mut self) -> io::Result<u8> {
+        let byte = self.view_byte()?;
         let bit = bitwise::get_bit(byte as u32, self.bit_position % 8);
         self.bit_position += 1;
         self.read_len += 1;
-        bit
+        Ok(bit)
     }
 
-    pub fn read_block(&mut self) -> FileBlock {
+    fn read_block(&mut self) -> io::Result<FileBlock> {
         // reads string as bytes from file
         let mut filename_rel = String::from("/");
-        let mut byte = self.read_aligned_byte();
+        let mut byte = self.read_aligned_byte()?;
         while byte != 0 {
             filename_rel.push(byte as char);
-            byte = self.read_aligned_byte();
+            byte = self.read_aligned_byte()?;
         }
         // create block and read u64 values from file into fields
-        let mut block = FileBlock::new(&filename_rel, "");
-        block.tree_bit_size = self.read_u64();
-        block.data_bit_size = self.read_u64();
-        block.file_byte_offset = self.read_u64();
-        block.original_byte_size = self.read_u64();
-        block
+        Ok(FileBlock {
+            filename_abs: String::from(""),
+            filename_rel: String::from(filename_rel),
+            fbs: FileBitSize {
+                tree_bit_size: self.read_u64()?,
+                data_bit_size: self.read_u64()?,
+            },
+            file_byte_offset: self.read_u64()?,
+            og_byte_size: self.read_u64()?,
+        })
     }
 
-    pub fn read_u64(&mut self) -> u64 {
+    fn read_u64(&mut self) -> io::Result<u64> {
         let mut buffer = [0u8; 8];
         for i in 0..8 {
-            buffer[i] = self.read_aligned_byte();
+            buffer[i] = self.read_aligned_byte()?;
         }
-        u64::from_le_bytes(buffer)
+        Ok(u64::from_le_bytes(buffer))
     }
 }

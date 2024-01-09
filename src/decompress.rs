@@ -2,7 +2,7 @@
 // 1/5/2023
 // Bit-by-bit file decompressor
 
-use std::fs;
+use std::{fs, io};
 use std::path;
 use std::path::{Path};
 use std::time::Instant;
@@ -10,98 +10,113 @@ use rayon::prelude::*;
 use crate::data::{FileBlock};
 use crate::charset::{GRP_SEP, SIG};
 use crate::parallelism;
-use crate::read::FileReader;
-use crate::tree::Node;
+use crate::read::{BitwiseReader, FileReader};
+use crate::write::BitwiseWriter;
+use crate::tree::Tree;
 use crate::utils;
 use crate::write::FileWriter;
 
-pub fn unarchive_zip(input_filepath: &str, multithreaded: bool) {
+pub fn unarchive_zip(input_filepath: &str, multithreaded: bool) -> io::Result<()> {
     let now = Instant::now();
 
     let output_dir = utils::get_no_ext(input_filepath);
-    fs::create_dir_all(&output_dir).expect("Couldn't create directory");
-    let blocks = get_file_blocks(input_filepath);
+    fs::create_dir_all(&output_dir)?;
+
+    let blocks_reader = &mut FileReader::new(input_filepath)?;
+    let blocks = get_file_blocks(blocks_reader)?;
 
     parallelism::configure_thread_pool(multithreaded, blocks.len());
 
-    decompress_files(&blocks, input_filepath, &output_dir);
+    decompress_files(&blocks, input_filepath, &output_dir)?;
 
     let elapsed = now.elapsed();
     println!("Finished unzipping in {:.2?}", elapsed);
+
+    Ok(())
 }
 
-pub fn get_file_blocks(archive_filepath: &str) -> Vec<FileBlock> {
-    let mut reader = FileReader::new(archive_filepath);
-    if reader.read_u64() != SIG {
-        panic!("File is not a zipr file");
+pub fn get_file_blocks(reader: &mut dyn BitwiseReader) -> io::Result<Vec<FileBlock>> {
+    if reader.read_u64()? != SIG {
+        return Err(io::Error::new(io::ErrorKind::Other,"File is not a valid zipr file"))
     }
     // iterate through headers until the file separator byte is found or eof
     let mut blocks = vec![];
     while !reader.eof() {
-        let sep = reader.read_aligned_byte();
+        let sep = reader.read_aligned_byte()?;
         if sep == GRP_SEP {
             break;
         }
-        let block = reader.read_block();
+        let block = reader.read_block()?;
         blocks.push(block);
     }
-    blocks
+    Ok(blocks)
 }
 
-fn decompress_files(blocks: &[FileBlock], archive_filepath: &str, output_dir: &str) {
+fn decompress_files(blocks: &[FileBlock], archive_filepath: &str, output_dir: &str) -> io::Result<()> {
     // decompress each file, this can be parallelized because each function call writes to a different file
-    blocks.par_iter().for_each(|block| {
-        decompress_file(&block, output_dir, archive_filepath);
-    });
+    blocks.par_iter()
+        .map(|block| decompress_file(block, archive_filepath, output_dir))
+        .collect()
 }
 
-fn decompress_file(block: &FileBlock, output_dir: &str, archive_filepath: &str) {
+fn decompress_file(block: &FileBlock, archive_filepath: &str, output_dir: &str) -> io::Result<()> {
     let unarchived_filename = &format!("{}{}{}", output_dir, path::MAIN_SEPARATOR, &block.filename_rel);
-
-    // read from the main archive jumping to the data segment
-    let reader = &mut FileReader::new(archive_filepath);
-    reader.seek_from_start((utils::get_size_of(SIG) as u64) + block.file_byte_offset);
-
-    let root = read_node(reader);
-
     let unarchived_parent = Path::new(unarchived_filename).parent().unwrap();
-    fs::create_dir_all(unarchived_parent).expect("Couldn't create directories");
+    fs::create_dir_all(unarchived_parent)?;
+
+    let writer = &mut FileWriter::new(unarchived_filename)?;
+    let reader = &mut FileReader::new(archive_filepath)?;
+    decompress(&block, reader, writer)
+}
+
+// read the contents of a compressed archive and write into a decompressed stream
+fn decompress(block: &FileBlock, reader: &mut dyn BitwiseReader, writer: &mut dyn BitwiseWriter) -> io::Result<()> {
+    // read from the main archive: jumping to the data segment
+    reader.seek_from_start((utils::get_size_of(SIG) as u64) + block.file_byte_offset)?;
+
+    // read the tree structure of the codebook tree
+    let root = read_tree(reader)?;
 
     // decompress each symbol in data segment, stopping at the end
-    let writer = &mut FileWriter::new(unarchived_filename);
     let start_read_len = reader.read_len() as i64;
     while !reader.eof() {
         let read_len = reader.read_len() as i64;
-        if (read_len - start_read_len) > (block.data_bit_size as i64 - 8) {
+        if (read_len - start_read_len) > (block.fbs.data_bit_size as i64 - 8) {
             break;
         }
-        decompress_next_symbol(reader, writer, &root);
+        decompress_symbol(reader, writer, &root)?;
     }
+    Ok(())
 }
 
-fn read_node(reader: &mut FileReader) -> Box<Node> {
-    let bit = reader.read_bit();
+// read the next node from a compressed archive
+fn read_tree(reader: &mut dyn BitwiseReader) -> io::Result<Box<Tree>> {
+    let bit = reader.read_bit()?;
     if bit == 1 {
         // read 8 unaligned bits
-        Box::new(Node::leaf(reader.read_bits(8), 0))
+        let symbol = reader.read_bits(8)?;
+        Ok(Box::new(Tree::leaf(symbol, 0)))
     } else {
-        let left = read_node(reader);
-        let right = read_node(reader);
-        Box::new(Node::internal(left, right, 0, 0))
+        let left = read_tree(reader)?;
+        let right = read_tree(reader)?;
+        Ok(Box::new(Tree::internal(left, right, 0, 0)))
     }
 }
 
-fn decompress_next_symbol(reader: &mut FileReader, writer: &mut FileWriter, node: &Box<Node>) {
+// read the next symbol from the compressed archived and write it into a decompressed stream using the codebook tree
+fn decompress_symbol(reader: &mut dyn BitwiseReader, writer: &mut dyn BitwiseWriter, node: &Box<Tree>) -> io::Result<()> {
     if node.is_leaf() {
-        writer.write_byte(node.plain_symbol);
+        writer.write_byte(node.plain_symbol)?;
+        Ok(())
     } else {
-        let bit = reader.read_bit();
+        let bit = reader.read_bit()?;
+        // invariant: a non-leaf should have left and right nodes in a full tree
         if bit == 0 {
             let left = node.left.as_ref().expect("Expected left node to be Some");
-            decompress_next_symbol(reader, writer, left);
+            decompress_symbol(reader, writer, left)
         } else {
             let right = node.right.as_ref().expect("Expected right node to be Some");
-            decompress_next_symbol(reader, writer, right);
+            decompress_symbol(reader, writer, right)
         }
     }
 }
