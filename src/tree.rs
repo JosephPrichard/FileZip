@@ -4,11 +4,6 @@
 
 use std::cmp::Ordering;
 
-pub struct CodeTree {
-    pub root: Box<Tree>,
-    pub symbol_count: u32,
-}
-
 pub struct Tree {
     pub left: Option<Box<Tree>>,
     pub right: Option<Box<Tree>>,

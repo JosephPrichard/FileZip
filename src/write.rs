@@ -7,18 +7,24 @@ use std::io::{Write};
 use std::{io, mem};
 use crate::bitwise;
 use crate::bitwise::{SymbolCode};
-use crate::data::{FileBlock};
+use crate::block::{FileBlock};
 
 const BUFFER_LEN: usize = 4096;
 const BUFFER_BIT_LEN: u32 = (BUFFER_LEN * 8) as u32;
 
-pub trait BitwiseWriter {
+pub trait BitWriter {
     fn align_to_byte(&mut self) -> io::Result<()>;
+    // write a byte to the byte position the bit position is at
     fn write_byte(&mut self, byte: u8) -> io::Result<()>;
+    // write up to 8 bits to the bitstream
     fn write_bits(&mut self, byte: u8, count: u8) -> io::Result<()>;
+    // write a single bit to the bitstream
     fn write_bit(&mut self, bit: u8) -> io::Result<()>;
+    // write an encoded "symbol" to the bitstream (only writes the number of bits needed to encode)
     fn write_symbol(&mut self, symbol: &SymbolCode) -> io::Result<()>;
+    // write a file block to the bitstream
     fn write_block(&mut self, block: &FileBlock) -> io::Result<()>;
+    // write a 64 bit integer to the bitstream
     fn write_u64(&mut self, num: u64) -> io::Result<()>;
 }
 
@@ -60,7 +66,7 @@ impl FileWriter {
     }
 }
 
-impl BitwiseWriter for FileWriter {
+impl BitWriter for FileWriter {
     fn align_to_byte(&mut self) -> io::Result<()> {
         self.bit_position = ((self.bit_position + 7) / 8) * 8;
         Ok(())
@@ -113,8 +119,8 @@ impl BitwiseWriter for FileWriter {
         }
         self.write_byte(0)?;
         // write each u64 field into the file
-        self.write_u64(block.fbs.tree_bit_size)?;
-        self.write_u64(block.fbs.data_bit_size)?;
+        self.write_u64(block.tree_bit_size)?;
+        self.write_u64(block.data_bit_size)?;
         self.write_u64(block.file_byte_offset)?;
         self.write_u64(block.og_byte_size)?;
         Ok(())

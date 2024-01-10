@@ -3,7 +3,7 @@
 // Utilities used for debugging only
 
 use crate::bitwise::SymbolCode;
-use crate::read::{BitwiseReader, FileReader};
+use crate::read::{BitReader, FileReader};
 use crate::tree::Tree;
 
 pub fn debug_binary_file(filepath: &str) {

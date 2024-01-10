@@ -7,41 +7,41 @@ use std::path;
 use std::path::{Path};
 use std::time::Instant;
 use rayon::prelude::*;
-use crate::data::{FileBlock};
-use crate::charset::{GRP_SEP, SIG};
+use crate::block::{FileBlock};
+use crate::compress::{GRP_SEP, SIG};
 use crate::parallelism;
-use crate::read::{BitwiseReader, FileReader};
-use crate::write::BitwiseWriter;
+use crate::read::{BitReader, FileReader};
+use crate::write::BitWriter;
 use crate::tree::Tree;
 use crate::utils;
 use crate::write::FileWriter;
 
-pub fn unarchive_zip(input_filepath: &str, multithreaded: bool) -> io::Result<()> {
+pub fn unarchive_zip(archive_filepath: &str, multithreaded: bool) -> io::Result<()> {
     let now = Instant::now();
 
-    let output_dir = utils::get_no_ext(input_filepath);
+    let output_dir = utils::get_no_ext(archive_filepath);
     fs::create_dir_all(&output_dir)?;
 
-    let blocks_reader = &mut FileReader::new(input_filepath)?;
+    let blocks_reader = &mut FileReader::new(archive_filepath)?;
     let blocks = get_file_blocks(blocks_reader)?;
 
     parallelism::configure_thread_pool(multithreaded, blocks.len())?;
-    decompress_files(&blocks, input_filepath, &output_dir)?;
+    decompress_files(&blocks, archive_filepath, &output_dir)?;
 
     let elapsed = now.elapsed();
     println!("Finished unzipping in {:.2?}", elapsed);
-
     Ok(())
 }
 
-pub fn get_file_blocks(reader: &mut dyn BitwiseReader) -> io::Result<Vec<FileBlock>> {
+pub fn get_file_blocks(reader: &mut dyn BitReader) -> io::Result<Vec<FileBlock>> {
     if reader.read_u64()? != SIG {
-        return Err(io::Error::new(io::ErrorKind::Other,"File is not a valid zipr file"))
+        return Err(io::Error::new(
+            io::ErrorKind::Other, "Cannot read from an invalid zipr file"));
     }
     // iterate through headers until the file separator byte is found or eof
     let mut blocks = vec![];
     while !reader.eof() {
-        let sep = reader.read_aligned_byte()?;
+        let sep = reader.read_byte()?;
         if sep == GRP_SEP {
             break;
         }
@@ -70,18 +70,17 @@ fn decompress_file(block: &FileBlock, archive_filepath: &str, output_dir: &str) 
 }
 
 // read the contents of a compressed archive and write into a decompressed stream
-fn decompress(block: &FileBlock, reader: &mut dyn BitwiseReader, writer: &mut dyn BitwiseWriter) -> io::Result<()> {
+fn decompress(block: &FileBlock, reader: &mut dyn BitReader, writer: &mut dyn BitWriter) -> io::Result<()> {
     // read from the main archive: jumping to the data segment
-    reader.seek_from_start((utils::get_size_of(SIG) as u64) + block.file_byte_offset)?;
+    reader.seek((utils::get_size_of(SIG) as u64) + block.file_byte_offset)?;
 
-    // read the tree structure of the codebook tree
     let root = read_tree(reader)?;
 
     // decompress each symbol in data segment, stopping at the end
     let start_read_len = reader.read_len() as i64;
     while !reader.eof() {
         let read_len = reader.read_len() as i64;
-        if (read_len - start_read_len) > (block.fbs.data_bit_size as i64 - 8) {
+        if (read_len - start_read_len) > (block.data_bit_size as i64 - 8) {
             break;
         }
         decompress_symbol(reader, writer, &root)?;
@@ -89,8 +88,8 @@ fn decompress(block: &FileBlock, reader: &mut dyn BitwiseReader, writer: &mut dy
     Ok(())
 }
 
-// read the next node from a compressed archive
-fn read_tree(reader: &mut dyn BitwiseReader) -> io::Result<Box<Tree>> {
+// read the tree from a compressed archive
+fn read_tree(reader: &mut dyn BitReader) -> io::Result<Box<Tree>> {
     let bit = reader.read_bit()?;
     if bit == 1 {
         // read 8 unaligned bits
@@ -104,7 +103,7 @@ fn read_tree(reader: &mut dyn BitwiseReader) -> io::Result<Box<Tree>> {
 }
 
 // read the next symbol from the compressed archived and write it into a decompressed stream using the codebook tree
-fn decompress_symbol(reader: &mut dyn BitwiseReader, writer: &mut dyn BitwiseWriter, node: &Box<Tree>) -> io::Result<()> {
+fn decompress_symbol(reader: &mut dyn BitReader, writer: &mut dyn BitWriter, node: &Box<Tree>) -> io::Result<()> {
     if node.is_leaf() {
         writer.write_byte(node.plain_symbol)?;
         Ok(())

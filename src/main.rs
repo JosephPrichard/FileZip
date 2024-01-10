@@ -12,8 +12,7 @@ mod bitwise;
 mod write;
 mod tree;
 mod debug;
-mod data;
-mod charset;
+mod block;
 mod utils;
 mod parallelism;
 
@@ -62,7 +61,7 @@ fn main() {
 
 struct ExecFlags<'a> {
     exec_flag: &'a str,
-    has_mt_flag: bool
+    has_mt_flag: bool,
 }
 
 fn exec_cli<'a>(exec_flags: &'a ExecFlags, entries: &Vec<String>) -> io::Result<()> {
@@ -70,13 +69,17 @@ fn exec_cli<'a>(exec_flags: &'a ExecFlags, entries: &Vec<String>) -> io::Result<
     // execute a different command based on flag
     match exec_flags.exec_flag {
         "-l" | "list" => {
-            let arg = &entries[last];
-            let blocks_reader = &mut FileReader::new(arg)?;
+            let archive_path = &entries[last];
+            let blocks_reader = &mut FileReader::new(archive_path)?;
             let blocks = &decompress::get_file_blocks(blocks_reader)?;
-            data::list_file_blocks(blocks);
+            block::list_file_blocks(blocks);
             Ok(())
         }
-        "-d" | "decompress" => decompress::unarchive_zip(&entries[last], exec_flags.has_mt_flag),
-        "-c" | "compress" | _ => compress::archive_dir(&entries, exec_flags.has_mt_flag),
+        "-d" | "decompress" => {
+            let archive_path = &entries[last];
+            decompress::unarchive_zip(archive_path, exec_flags.has_mt_flag)
+        }
+        "-c" | "compress" | _ =>
+            compress::archive_dir(&entries, exec_flags.has_mt_flag),
     }
 }
