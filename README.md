@@ -1,4 +1,4 @@
-# Zipper
+# Zip
 Simple lossless file compression and archival format implemented in Rust. It utilizes huffman coding to compress files, generally achieving a 55-65% compression ratio for the average text file. The compression works on any file type, but it works on text file types (txt, json, xml) the best. The archival format is inspired by TAR but is custom designed for simplicity. Project involved implementing the huffman coding algorithm, memory safe binary trees, and bit-layered reader/writers. The project contains only rayon as a depndency and was primarily created to learn rust standard library.
 
 ## Compression Format
