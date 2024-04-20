@@ -5,28 +5,11 @@
 use std::fs::{File, OpenOptions};
 use std::io::{Write};
 use std::{io, mem};
-use crate::bitwise;
-use crate::bitwise::{SymbolCode};
-use crate::block::{FileBlock};
+use crate::bitwise::{get_bit, set_bit};
+use crate::structs::{FileBlock, SymbolCode};
 
 const BUFFER_LEN: usize = 4096;
 const BUFFER_BIT_LEN: u32 = (BUFFER_LEN * 8) as u32;
-
-pub trait BitWriter {
-    fn align_to_byte(&mut self) -> io::Result<()>;
-    // write a byte to the byte position the bit position is at
-    fn write_byte(&mut self, byte: u8) -> io::Result<()>;
-    // write up to 8 bits to the bitstream
-    fn write_bits(&mut self, byte: u8, count: u8) -> io::Result<()>;
-    // write a single bit to the bitstream
-    fn write_bit(&mut self, bit: u8) -> io::Result<()>;
-    // write an encoded "symbol" to the bitstream (only writes the number of bits needed to encode)
-    fn write_symbol(&mut self, symbol: &SymbolCode) -> io::Result<()>;
-    // write a file block to the bitstream
-    fn write_block(&mut self, block: &FileBlock) -> io::Result<()>;
-    // write a 64 bit integer to the bitstream
-    fn write_u64(&mut self, num: u64) -> io::Result<()>;
-}
 
 pub struct FileWriter {
     // the file stream to write to
@@ -64,15 +47,13 @@ impl FileWriter {
         }
         Ok(())
     }
-}
 
-impl BitWriter for FileWriter {
-    fn align_to_byte(&mut self) -> io::Result<()> {
+    pub fn align_to_byte(&mut self) -> io::Result<()> {
         self.bit_position = ((self.bit_position + 7) / 8) * 8;
         Ok(())
     }
 
-    fn write_byte(&mut self, byte: u8) -> io::Result<()> {
+    pub fn write_byte(&mut self, byte: u8) -> io::Result<()> {
         self.update_buffer()?;
 
         // write the byte directly into the buffer
@@ -82,37 +63,37 @@ impl BitWriter for FileWriter {
         Ok(())
     }
 
-    fn write_bits(&mut self, byte: u8, count: u8) -> io::Result<()> {
+    pub fn write_bits(&mut self, byte: u8, count: u8) -> io::Result<()> {
         // write each bit individually as they might end up in different bytes in the buffer
         for i in 0..count {
-            let bit = bitwise::get_bit(byte as u32, i as u32);
+            let bit = get_bit(byte as u32, i as u32);
             self.write_bit(bit)?;
         }
         Ok(())
     }
 
-    fn write_bit(&mut self, bit: u8) -> io::Result<()> {
+    pub fn write_bit(&mut self, bit: u8) -> io::Result<()> {
         self.update_buffer()?;
 
         // write the bit back into the buffer
         if bit > 0 {
             let i = (self.bit_position / 8) as usize;
-            self.buffer[i] = bitwise::set_bit(self.buffer[i] as u32, self.bit_position % 8);
+            self.buffer[i] = set_bit(self.buffer[i] as u32, self.bit_position % 8);
         }
 
         self.bit_position += 1;
         Ok(())
     }
 
-    fn write_symbol(&mut self, symbol: &SymbolCode) -> io::Result<()> {
+    pub fn write_symbol(&mut self, symbol: &SymbolCode) -> io::Result<()> {
         for i in 0..symbol.bit_len {
-            let bit = bitwise::get_bit(symbol.encoded_symbol, i as u32);
+            let bit = get_bit(symbol.encoded_symbol, i as u32);
             self.write_bit(bit)?;
         }
         Ok(())
     }
 
-    fn write_block(&mut self, block: &FileBlock) -> io::Result<()> {
+    pub fn write_block(&mut self, block: &FileBlock) -> io::Result<()> {
         // write string with a null terminator at the end
         for c in block.filename_rel.chars() {
             self.write_byte(c as u8)?;
@@ -126,7 +107,7 @@ impl BitWriter for FileWriter {
         Ok(())
     }
 
-    fn write_u64(&mut self, num: u64) -> io::Result<()> {
+    pub fn write_u64(&mut self, num: u64) -> io::Result<()> {
         let buffer: [u8; 8] = unsafe { mem::transmute(num) };
         for i in 0..8 {
             self.write_byte(buffer[i])?;
