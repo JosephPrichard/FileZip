@@ -1,3 +1,6 @@
+// Joseph Prichard
+// 4/25/2024
+// Bitwise operations
 
 pub fn set_bit(num: u32, n: u32) -> u8 {
     ((1 << n) | num) as u8

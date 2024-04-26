@@ -1,3 +1,7 @@
+// Joseph Prichard
+// 4/25/2024
+// Threading operations
+
 use std::io;
 use std::thread::available_parallelism;
 use rayon::ThreadPool;
