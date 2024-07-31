@@ -9,7 +9,8 @@ use rayon::ThreadPool;
 pub fn configure_thread_pool(multithreaded: bool, file_count: usize) -> io::Result<ThreadPool> {
     // configure the rayon thread pool based on -mt flag
     let threads = if multithreaded {
-        file_count.min(available_parallelism()?.get())
+        let cores = available_parallelism()?.get();
+        file_count.min(cores)
     } else {
         1
     };

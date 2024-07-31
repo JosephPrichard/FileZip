@@ -4,7 +4,7 @@
 
 use std::{fs, io};
 use std::path;
-use std::path::{Path};
+use std::path::Path;
 use std::time::Instant;
 use rayon::prelude::*;
 use rayon::ThreadPool;

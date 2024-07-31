@@ -3,7 +3,7 @@
 // File writer implementing a bit layer
 
 use std::fs::{File, OpenOptions};
-use std::io::{Write};
+use std::io::Write;
 use std::{io, mem};
 use crate::bitwise::{get_bit, set_bit};
 use crate::structs::{FileBlock, SymbolCode};

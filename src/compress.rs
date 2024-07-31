@@ -2,14 +2,14 @@
 // 1/5/2023
 // Byte-by-byte file compressor
 
-use std::collections::{BinaryHeap};
+use std::collections::BinaryHeap;
 use std::{fs, io};
-use std::path::{Path};
+use std::path::Path;
 use std::time::Instant;
 use rayon::prelude::*;
 use rayon::ThreadPool;
 use crate::structs::{FileBlock, SymbolCode, Tree};
-use crate::read::{FileReader};
+use crate::read::FileReader;
 use crate::threading::configure_thread_pool;
 use crate::write::FileWriter;
 
@@ -40,15 +40,17 @@ pub fn archive_dir(input_entry: &[String], multithreaded: bool) -> io::Result<Ve
 
     let blocks = create_file_blocks(&code_books);
 
-    let archive_filename = String::from(&input_entry[0]) + ".zipr";
+    let archive_filename = fs::canonicalize(String::from(&input_entry[0]) + ".zipr")?;
+    let archive_filename = archive_filename.to_str().unwrap();
 
-    let writer = &mut FileWriter::new(&archive_filename)?;
+    let writer = &mut FileWriter::new(archive_filename)?;
     writer.write_u64(SIG)?;
     write_block_headers(writer, &blocks)?;
     compress_files(writer, &code_books)?;
 
     let elapsed = now.elapsed();
     println!("Finished zipping in {:.2?}", elapsed);
+    println!("Wrote archive to: {}", &archive_filename);
 
     Ok(blocks)
 }

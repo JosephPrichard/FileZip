@@ -29,24 +29,35 @@ The archive two segments are separated by control code GS, and each file header 
 ### Compress
 Compresses each file into an archive using the compression strategy described above. Recursively adds sub-directories to archive.
 
-```../path/to/zipper.exe -c ../path/to/directory ../path/to/file.txt```
+```shell
+$ ./zip.exe -c ../path/to/directory ../path/to/file.txt
+```
 
 ### Decompress
 Decompresses the archive into the stored directory structure using the decompression strategy described above.
 
-```../path/to/zipper.exe -d ../path/to/archive.zipr```
+```shell
+$ ./zip.exe -d ../path/to/archive.zipr
+```
 
 ### List
 Lists the sizes, compression ratios, and relative file name of any files in the archive. 
 
-```../path/to/zipper.exe -l ../path/to/archive.zipr```
+```shell
+$ ./zip.exe -l ../path/to/archive.zipr
+```
 
 ### Multithreading
 Adds multithreaded parallelism using Rayon's threadpool. Uses the max number of cores as the thread pool count, although this isn't guaranteed to actually use all cores in the system (unless you have no other processes being executed).
 
-```../path/to/zipper.exe -c -mt ../path/to/directory```
+```shell
+$ ./zip.exe -c -mt ../path/to/directory
+```
 
 ## Example
-![image](https://github.com/JosephPrichard/Zipper/assets/58538077/6d8365f2-a7a8-45b1-96d3-632350a65184)
 
+```shell
+$ ./zip.exe -c -mt ./test/files
+```
+![image](https://github.com/user-attachments/assets/57e9778d-5c6d-4be6-9bc9-1faabc4b5fca)
 
