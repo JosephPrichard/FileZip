@@ -1,22 +1,37 @@
 // Joseph Prichard
 // 1/5/2023
-// Byte-by-byte file compressor
+// Byte-by-byte file compressor and decompressor
 
 use std::collections::BinaryHeap;
-use std::{fs, io};
+use std::thread::available_parallelism;
+use std::{fs, io, path};
 use std::path::Path;
 use std::time::Instant;
 use rayon::prelude::*;
 use rayon::ThreadPool;
-use crate::structs::{FileBlock, SymbolCode, Tree};
-use crate::read::FileReader;
-use crate::threading::configure_thread_pool;
-use crate::write::FileWriter;
+use crate::structures::{FileBlock, SymbolCode, Tree};
+use crate::bitwise_io::{FileReader, FileWriter};
 
 pub const TABLE_SIZE: usize = 256;
 pub const REC_SEP: u8 = 0x1E;
 pub const GRP_SEP: u8 = 0x1D;
 pub const SIG: u64 = str_to_u64("zipper");
+
+pub fn configure_thread_pool(multithreaded: bool, file_count: usize) -> io::Result<ThreadPool> {
+    let threads = if multithreaded {
+        let cores = available_parallelism()?.get();
+        file_count.min(cores)
+    } else {
+        1
+    };
+
+    println!("Running with {} threads", threads);
+    let tp = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .expect("Failed to configure thread pool");
+    Ok(tp)
+}
 
 pub const fn str_to_u64(str: &str) -> u64 {
     let mut buffer = [0u8; 8];
@@ -347,5 +362,169 @@ pub fn debug_tree(node: &Box<Tree>, symbol_code: SymbolCode) {
     if let Some(right) = &node.right {
         let symbol_code = symbol_code.append_bit(1);
         debug_tree(right, symbol_code);
+    }
+}
+
+pub fn unarchive_zip(archive_filepath: &str, multithreaded: bool) -> io::Result<()> {
+    let output_dir = strip_ext(archive_filepath);
+    fs::create_dir_all(&output_dir)?;
+
+    let now = Instant::now();
+
+    let blocks_reader = &mut FileReader::new(archive_filepath)?;
+    let blocks = get_file_blocks(blocks_reader)?;
+
+    let tp = configure_thread_pool(multithreaded, blocks.len())?;
+    decompress_files(&blocks, archive_filepath, &output_dir, &tp)?;
+
+    let elapsed = now.elapsed();
+    println!("Finished unzipping in {:.2?}", elapsed);
+    Ok(())
+}
+
+pub fn strip_ext(path: &str) -> String {
+    Path::new(path)
+        .with_extension("")
+        .display()
+        .to_string()
+}
+
+pub fn get_file_blocks(reader: &mut FileReader) -> io::Result<Vec<FileBlock>> {
+    if reader.read_u64()? != SIG {
+        return Err(io::Error::new(
+            io::ErrorKind::Other, "Cannot read from an invalid zipr file"));
+    }
+    // iterate through headers until the file separator byte is found or eof
+    let mut blocks = vec![];
+    while !reader.eof() {
+        let sep = reader.read_byte()?;
+        if sep == GRP_SEP {
+            break;
+        }
+        let block = reader.read_block()?;
+        blocks.push(block);
+    }
+    Ok(blocks)
+}
+
+fn decompress_files(blocks: &[FileBlock], archive_filepath: &str, output_dir: &str, tp: &ThreadPool) -> io::Result<()> {
+    // decompress each file, this can be parallelized because each function call writes to a different file
+    tp.install(|| {
+        blocks.par_iter()
+            .map(|block| decompress_file(block, archive_filepath, output_dir))
+            .collect()
+    })
+}
+
+fn decompress_file(block: &FileBlock, archive_filepath: &str, output_dir: &str) -> io::Result<()> {
+    let unarchived_filename = &format!("{}{}{}", output_dir, path::MAIN_SEPARATOR, &block.filename_rel);
+    if let Some(unarchived_parent) = Path::new(unarchived_filename).parent() {
+        fs::create_dir_all(unarchived_parent)?;
+    }
+
+    let writer = &mut FileWriter::new(unarchived_filename)?;
+    let reader = &mut FileReader::new(archive_filepath)?;
+    decompress(&block, reader, writer)
+}
+
+pub fn sizeof<T>(_: T) -> usize {
+    std::mem::size_of::<T>()
+}
+
+// read the contents of a compressed archive and write into a decompressed stream
+fn decompress(block: &FileBlock, reader: &mut FileReader, writer: &mut FileWriter) -> io::Result<()> {
+    // read from the main archive: jumping to the data segment
+    reader.seek((sizeof(SIG) as u64) + block.file_byte_offset)?;
+
+    let root = read_tree(reader)?;
+
+    // decompress each symbol in data segment, stopping at the end
+    let start_read_len = reader.read_len() as i64;
+    while !reader.eof() {
+        let read_len = reader.read_len() as i64;
+        if (read_len - start_read_len) > (block.data_bit_size as i64 - 8) {
+            break;
+        }
+        decompress_symbol(reader, writer, &root)?;
+    }
+    Ok(())
+}
+
+// read the tree from a compressed archive
+fn read_tree(reader: &mut FileReader) -> io::Result<Box<Tree>> {
+    let bit = reader.read_bit()?;
+    if bit == 1 {
+        // read 8 unaligned bits
+        let symbol = reader.read_bits(8)?;
+        Ok(Box::new(Tree::leaf(symbol, 0)))
+    } else {
+        let left = read_tree(reader)?;
+        let right = read_tree(reader)?;
+        Ok(Box::new(Tree::internal(left, right, 0, 0)))
+    }
+}
+
+// read the next symbol from the compressed archived and write it into a decompressed stream using the codebook tree
+fn decompress_symbol(reader: &mut FileReader, writer: &mut FileWriter, node: &Box<Tree>) -> io::Result<()> {
+    if node.is_leaf() {
+        writer.write_byte(node.plain_symbol)?;
+        Ok(())
+    } else {
+        let bit = reader.read_bit()?;
+        // invariant: a non-leaf should have left and right nodes in a full tree
+        if bit == 0 {
+            let left = node.left.as_ref().expect("Expected left node to be Some");
+            decompress_symbol(reader, writer, left)
+        } else {
+            let right = node.right.as_ref().expect("Expected right node to be Some");
+            decompress_symbol(reader, writer, right)
+        }
+    }
+}
+
+mod tests {
+    use std::{collections::HashMap, fs};
+    use crate::compress::{archive_dir, unarchive_zip};
+
+    #[test]
+    fn test_compress_directory() {
+        let input_path = String::from("./test/files");
+
+        let mut dir_data = HashMap::new();
+        for entry in fs::read_dir(&input_path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                continue
+            }
+            let file_data = fs::read_to_string(&path)
+                .expect(&format!("Cannot read file at path {}", path.to_str().unwrap()));
+
+            let relative_path = path.strip_prefix(&input_path).unwrap().to_owned();
+            dir_data.insert(relative_path.clone(), file_data);
+        }
+        println!("Directory files {:?}", dir_data.keys());
+
+        archive_dir(&[input_path], false).unwrap();
+        unarchive_zip("./test/files.zipr", false).unwrap();
+
+        let output_path = "./test/files/files";
+        for entry in fs::read_dir(output_path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                continue
+            }
+            let file_data = fs::read_to_string(&path)
+                .expect(&format!("Cannot read at file path {}", path.to_str().unwrap()));
+
+            let relative_path = path.strip_prefix(&output_path).unwrap();
+            let other_file_data = dir_data.get(relative_path)
+                .expect(&format!("Cannot find path in map {}", path.to_str().unwrap()));
+
+            if file_data != *other_file_data {
+                panic!("File data for file path is different: {}", path.to_str().unwrap())
+            }
+        }
+
+        fs::remove_dir_all("./test/files/files").unwrap();
     }
 }

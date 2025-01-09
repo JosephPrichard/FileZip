@@ -2,18 +2,15 @@
 // 1/5/2023
 // Application to compress or decompress files
 
-use std::{env, io};
+use std::env;
+use compress::{get_file_blocks, unarchive_zip};
+
 use crate::compress::{archive_dir, list_file_blocks};
-use crate::decompress::{get_file_blocks, unarchive_zip};
-use crate::read::FileReader;
+use crate::bitwise_io::FileReader;
 
 mod compress;
-mod read;
-mod decompress;
-mod write;
-mod structs;
-mod threading;
-mod bitwise;
+mod bitwise_io;
+mod structures;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -60,15 +57,15 @@ struct ExecFlags<'a> {
     has_mt_flag: bool,
 }
 
-fn exec_cli<'a>(exec_flags: &'a ExecFlags, entries: &Vec<String>) -> io::Result<()> {
+fn exec_cli<'a>(exec_flags: &'a ExecFlags, entries: &Vec<String>) -> std::io::Result<()> {
     let last = entries.len() - 1;
     // execute a different command based on flag
     match exec_flags.exec_flag {
         "-l" | "list" => {
             let archive_path = &entries[last];
             let blocks_reader = &mut FileReader::new(archive_path)?;
-            let blocks = &get_file_blocks(blocks_reader)?;
-            list_file_blocks(blocks);
+            let blocks = get_file_blocks(blocks_reader)?;
+            list_file_blocks(&blocks);
             Ok(())
         }
         "-d" | "decompress" => {
@@ -80,54 +77,5 @@ fn exec_cli<'a>(exec_flags: &'a ExecFlags, entries: &Vec<String>) -> io::Result<
             list_file_blocks(&blocks);
             Ok(())
         }
-    }
-}
-
-mod tests {
-    use std::collections::HashMap;
-    use std::fs;
-    use crate::compress::archive_dir;
-    use crate::decompress::unarchive_zip;
-
-    #[test]
-    fn test_compress_directory() {
-        let input_path = String::from("./test/files");
-
-        let mut dir_data = HashMap::new();
-        for entry in fs::read_dir(&input_path).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                continue
-            }
-            let file_data = fs::read_to_string(&path)
-                .expect(&format!("Cannot read file at path {}", path.to_str().unwrap()));
-
-            let relative_path = path.strip_prefix(&input_path).unwrap().to_owned();
-            dir_data.insert(relative_path.clone(), file_data);
-        }
-        println!("Directory files {:?}", dir_data.keys());
-
-        archive_dir(&[input_path], false).unwrap();
-        unarchive_zip("./test/files.zipr", false).unwrap();
-
-        let output_path = "./test/files/files";
-        for entry in fs::read_dir(output_path).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                continue
-            }
-            let file_data = fs::read_to_string(&path)
-                .expect(&format!("Cannot read at file path {}", path.to_str().unwrap()));
-
-            let relative_path = path.strip_prefix(&output_path).unwrap();
-            let other_file_data = dir_data.get(relative_path)
-                .expect(&format!("Cannot find path in map {}", path.to_str().unwrap()));
-
-            if file_data != *other_file_data {
-                panic!("File data for file path is different: {}", path.to_str().unwrap())
-            }
-        }
-
-        fs::remove_dir_all("./test/files/files").unwrap();
     }
 }
